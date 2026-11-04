@@ -1,11 +1,9 @@
 from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
-from django.urls import path
-from api import views
 
 from .views import (
     AlertaDetailView, AlertaListView, AreaDetailView, AreaListView,
-    LoginView, MeView,
+    LoginView, MeView, focos_calor,
 )
 
 urlpatterns = [
@@ -17,10 +15,6 @@ urlpatterns = [
     path("areas/<int:pk>/", AreaDetailView.as_view(), name="area_detalle"),
     path("alertas/", AlertaListView.as_view(), name="alertas"),
     path("alertas/<int:pk>/", AlertaDetailView.as_view(), name="alerta_detalle"),
-]
 
-path(
-    "focos-calor/",
-    views.focos_calor,
-    name="focos_calor"
-),
+    path("focos-calor/", focos_calor, name="focos_calor"),
+]

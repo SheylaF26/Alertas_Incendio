@@ -1,13 +1,9 @@
 from .precipitacion import Precipitacion
-
 from .humedad_relativa_max import HumedadRelativaMax
 from .humedad_relativa_min import HumedadRelativaMin
-
 from .temperatura_max import TemperaturaMax
 from .temperatura_min import TemperaturaMin
-
 from .velocidad_viento_max import VelocidadVientoMax
 from .velocidad_viento_min import VelocidadVientoMin
-
 from .direccion_viento_max import DireccionVientoMax
 from .direccion_viento_min import DireccionVientoMin

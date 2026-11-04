@@ -1,3 +1,5 @@
+import logging
+
 from django.shortcuts import get_object_or_404
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -5,13 +7,15 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
 from django.http import JsonResponse
 from django.views.decorators.http import require_GET
-from api.services.nasa_firms import obtener_focos_calor
+from .services.nasa_firms import HORAS_MAXIMAS, HORAS_POR_DEFECTO, obtener_focos_calor
 from .models import Alertas
 from .permissions import CON_LOGIN, grupo_requerido
 from .serializers import (
-    AlertaSerializer, AreaSerializer, LoginSerializer, grupos_de,
+    AlertaSerializer, AreaSerializer, LoginSerializer, datos_usuario,
 )
 from .services.alertas import alertas_por_id, areas_con_ultima_alerta, areas_de_alertas
+
+logger = logging.getLogger(__name__)
 
 
 class LoginView(TokenObtainPairView):
@@ -19,15 +23,9 @@ class LoginView(TokenObtainPairView):
 
 
 class MeView(APIView):
+    """Datos del usuario logueado y sus grupos (leídos de la BD en cada llamada)."""
     def get(self, request):
-        u = request.user
-        return Response({
-            "id": u.id,
-            "username": u.username,
-            "nombre": u.get_full_name(),
-            "email": u.email,
-            "grupos": grupos_de(u),
-        })
+        return Response(datos_usuario(request.user))
 
 
 class AreaListView(APIView):
@@ -81,18 +79,28 @@ class AlertaDetailView(APIView):
 def focos_calor(request):
     """
     Devuelve los focos de calor de Ecuador continental.
+    ?horas=N limita a las últimas N horas (1–48, por defecto 24).
     """
     try:
-        focos = obtener_focos_calor()
+        horas = int(request.GET.get("horas", HORAS_POR_DEFECTO))
+    except ValueError:
+        return JsonResponse({
+            "success": False,
+            "mensaje": "El parámetro horas debe ser un número entero."
+        }, status=400)
+
+    try:
+        focos = obtener_focos_calor(horas)
 
         return JsonResponse({
             "success": True,
+            "horas": max(1, min(horas, HORAS_MAXIMAS)),
             "total": len(focos),
             "focos": focos
         }, json_dumps_params={"ensure_ascii": False})
 
-    except Exception as error:
-        print(f"Error al consultar NASA FIRMS: {error}")
+    except Exception:
+        logger.exception("Error al consultar NASA FIRMS")
 
         return JsonResponse({
             "success": False,

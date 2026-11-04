@@ -19,7 +19,7 @@ if not SECRET_KEY:
     raise ImproperlyConfigured('Falta SECRET_KEY en el archivo .env')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv('DEBUG', 'False').strip().lower() in ('1', 'true', 'yes')
 
 ALLOWED_HOSTS = [
     h.strip()
@@ -31,7 +31,6 @@ ALLOWED_HOSTS = [
 # Application definition
 
 INSTALLED_APPS = [
-    'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
@@ -121,16 +120,6 @@ AUTH_USER_MODEL = 'api.Usuario'
 MIGRATION_MODULES = {'api': None}
 
 
-# Password validation
-
-AUTH_PASSWORD_VALIDATORS = [
-    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
-    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
-    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
-    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
-]
-
-
 # Django REST Framework
 
 REST_FRAMEWORK = {
@@ -149,7 +138,11 @@ SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'AUTH_HEADER_TYPES': ('Bearer',),
+    # No escribir last_login: seguridades.usuarios es compartida con otros sistemas.
+    'UPDATE_LAST_LOGIN': False,
 }
+
+AUTHENTICATION_BACKENDS = ['api.autenticacion.Sha256Backend']
 
 
 # Internationalization

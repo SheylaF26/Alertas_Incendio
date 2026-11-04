@@ -1,7 +1,24 @@
+"""
+Base histórica (alias 'default'), esquema `seguridades`.
+
+`usuarios` es compartida con otros sistemas: esta app solo la lee.
+El acceso a la app se controla con `grupos` y `usuarios_groups`.
+"""
+import hashlib
+import hmac
+
 from django.contrib.auth.base_user import AbstractBaseUser
 from django.contrib.auth.models import UserManager
 from django.db import models
 from django.utils import timezone
+
+
+def password_valida(password_plano, hash_guardado):
+    """Compara contra el SHA-256 (hex, sin sal) guardado en seguridades.usuarios."""
+    if not password_plano or not hash_guardado:
+        return False
+    calculado = hashlib.sha256(password_plano.encode("utf-8")).hexdigest()
+    return hmac.compare_digest(calculado, hash_guardado.strip().lower())
 
 
 class Grupo(models.Model):
@@ -9,7 +26,7 @@ class Grupo(models.Model):
 
     class Meta:
         managed = False
-        db_table = '"seguridades"."incendios_grupos"'
+        db_table = '"seguridades"."grupos"'
 
     def __str__(self):
         return self.name
@@ -19,7 +36,7 @@ class Usuario(AbstractBaseUser):
     id = models.BigAutoField(primary_key=True)
     username = models.CharField(max_length=150, unique=True)
     password = models.CharField(max_length=128, null=True, blank=True)
-    email = models.EmailField(max_length=100)
+    email = models.CharField(max_length=100, unique=True)
     persona_fk = models.BigIntegerField(null=True, blank=True)
     estado = models.CharField(max_length=1, null=True, blank=True, default="1")
     conv = models.BooleanField(default=True)
@@ -35,14 +52,8 @@ class Usuario(AbstractBaseUser):
 
     objects = UserManager()
 
-    
-
-    email = models.CharField(max_length=100, unique=True)   # unique solo para Django, no toca tu BD
-    USERNAME_FIELD = "email"
-    REQUIRED_FIELDS = ["username"]
-    
-    
-    
+    USERNAME_FIELD = "username"
+    REQUIRED_FIELDS = ["email"]
 
     class Meta:
         managed = False
@@ -51,6 +62,14 @@ class Usuario(AbstractBaseUser):
     @property
     def is_active(self):
         return self.estado == "1"
+
+    # Solo valida: Django por defecto re-hashearía y guardaría la contraseña,
+    # lo que modificaría la tabla compartida.
+    def check_password(self, raw_password):
+        return password_valida(raw_password, self.password)
+
+    def set_password(self, raw_password):
+        raise NotImplementedError("Las contraseñas se gestionan fuera de esta aplicación.")
 
     def get_full_name(self):
         return f"{self.first_name} {self.last_name}".strip()

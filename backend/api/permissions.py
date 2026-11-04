@@ -1,9 +1,8 @@
 from rest_framework.permissions import BasePermission
 
-GUARDAPARQUES = "guardaparques"
-BRIGADAS = "brigadas"
-ENTIDADES = "entidades_publicas"
-CON_LOGIN = (GUARDAPARQUES, BRIGADAS, ENTIDADES)
+GUARDAPARQUES = "aplicacion incendios guardaparques"
+BRIGADAS = "aplicacion incendios brigadas"
+CON_LOGIN = (GUARDAPARQUES, BRIGADAS)
 
 
 def grupo_requerido(*nombres):

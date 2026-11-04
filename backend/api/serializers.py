@@ -5,24 +5,38 @@ from api.models import Alertas, AreaProtegida
 
 
 def grupos_de(usuario):
-    return list(usuario.groups.values_list("name", flat=True))
+    return [
+        {"id": g.id, "nombre": g.name}
+        for g in usuario.groups.order_by("id")
+    ]
+
+
+def datos_usuario(usuario):
+    return {
+        "id": usuario.id,
+        "username": usuario.username,
+        "first_name": usuario.first_name,
+        "nombre": usuario.get_full_name(),
+        "email": usuario.email,
+        "grupos": grupos_de(usuario),
+    }
 
 
 class LoginSerializer(TokenObtainPairSerializer):
+    default_error_messages = {
+        "no_active_account": "Credenciales inválidas o sin acceso a la aplicación.",
+    }
+
     @classmethod
     def get_token(cls, user):
         token = super().get_token(user)
-        token["grupos"] = grupos_de(user)
+        token["first_name"] = user.first_name
+        token["grupos"] = [g["id"] for g in grupos_de(user)]
         return token
 
     def validate(self, attrs):
         data = super().validate(attrs)
-        data["usuario"] = {
-            "id": self.user.id,
-            "username": self.user.username,
-            "nombre": self.user.get_full_name(),
-            "grupos": grupos_de(self.user),
-        }
+        data["usuario"] = datos_usuario(self.user)
         return data
 
 
