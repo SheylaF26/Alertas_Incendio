@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     # Aplicación del proyecto
     'api',
     'rest_framework',
+    'drf_spectacular',
 ]
 
 
@@ -131,6 +132,65 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_RENDERER_CLASSES': [
         'rest_framework.renderers.JSONRenderer',
+    ],
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+# Swagger / OpenAPI: /api_incendios/docs/ (Swagger), /redoc/ y /schema/
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'API Alertas de Incendios - INAMHI',
+    'VERSION': '1.0.0',
+    'DESCRIPTION': """
+API del sistema de alertas de incendios forestales.
+
+**URL base:** `https://apis.inamhi.gob.ec/api_incendios/`
+
+## Cómo autenticarse
+1. `POST login/` con `{"username": "...", "password": "..."}` → devuelve `access`, `refresh` y `usuario`.
+2. En cada endpoint protegido envía el header `Authorization: Bearer <access>`.
+3. El `access` dura **30 minutos**. Si un endpoint responde 401, llama a `POST token/refresh/`
+   con `{"refresh": "..."}` para obtener uno nuevo. El `refresh` dura **7 días**; si también vence, vuelve al login.
+4. Al cerrar sesión basta con borrar `access` y `refresh` del front.
+
+Para probar aquí: usa *login*, copia el `access` y pégalo en el botón **Authorize** (solo el token, sin "Bearer").
+
+## Grupos y permisos
+| id | grupo | acceso |
+|---|---|---|
+| 1 | aplicacion incendios guardaparques | alertas |
+| 2 | aplicacion incendios brigadas | alertas |
+
+- El token incluye los claims `first_name` y `grupos` (lista de ids) para pintar la interfaz rápido.
+- Al abrir la app conviene llamar a `GET me/`: devuelve los grupos actuales leídos de la base.
+- Lo que el front muestre u oculte es solo visual: el backend valida el grupo en cada petición.
+
+## Códigos de respuesta
+| código | significado |
+|---|---|
+| 200 | OK |
+| 400 | Parámetros inválidos |
+| 401 | Sin token, token vencido o credenciales inválidas |
+| 403 | Autenticado pero sin un grupo permitido |
+| 404 | No existe |
+| 502 | Servicio externo (NASA FIRMS) no respondió |
+
+Los errores de DRF tienen la forma `{"detail": "mensaje"}`.
+""",
+    'SERVE_INCLUDE_SCHEMA': False,
+    'SERVE_PERMISSIONS': ['rest_framework.permissions.AllowAny'],
+    'SERVE_AUTHENTICATION': [],
+    'COMPONENT_SPLIT_REQUEST': True,
+    'SCHEMA_PATH_PREFIX': r'/api_incendios/',
+    'SWAGGER_UI_SETTINGS': {
+        'persistAuthorization': True,
+        'displayRequestDuration': True,
+        'docExpansion': 'list',
+    },
+    'TAGS': [
+        {'name': 'Autenticación', 'description': 'Login, renovación de token y datos del usuario.'},
+        {'name': 'Áreas protegidas', 'description': 'Áreas protegidas con su alerta vigente (público).'},
+        {'name': 'Alertas', 'description': 'Alertas de incendio (requiere grupo guardaparques o brigadas).'},
+        {'name': 'Focos de calor', 'description': 'Detecciones satelitales de NASA FIRMS (público).'},
     ],
 }
 
