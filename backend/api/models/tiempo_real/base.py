@@ -2,7 +2,11 @@ from django.db import models
 
 
 class MedicionTiempoReal(models.Model):
-    """Estructura común de las tablas de variables en tiempo real (esquema convencionales)."""
+    """Estructura común de las tablas de variables en tiempo real (esquema public).
+
+    Ojo: convencionales._017140801h existe con otra estructura; por eso db_table
+    lleva el esquema explícito en cada modelo.
+    """
     pk = models.CompositePrimaryKey("id_estacion", "fecha_toma_dato", "instrumento")
     id_usuario = models.IntegerField(blank=True, null=True)
     id_estacion = models.IntegerField()

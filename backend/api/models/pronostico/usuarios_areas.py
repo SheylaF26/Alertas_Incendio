@@ -2,9 +2,9 @@ from django.db import models
 from .area_protegida import AreaProtegida
 
 
-class GuardaparquesAreas(models.Model):
+class UsuariosAreas(models.Model):
     id = models.BigAutoField(primary_key=True)
-    usuario_id = models.BigIntegerField()
+    usuario_id = models.BigIntegerField()  # seguridades.usuarios.id (otra base, sin FK); el rol lo da el grupo
     area_protegida = models.ForeignKey(
         AreaProtegida,
         models.DO_NOTHING
@@ -12,4 +12,4 @@ class GuardaparquesAreas(models.Model):
 
     class Meta:
         managed = False
-        db_table = 'guardaparques_areas'
+        db_table = 'usuarios_areas'
