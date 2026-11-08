@@ -215,6 +215,9 @@ class FocosCalorView(APIView):
             OpenApiParameter("fuente", str, enum=["viirs", "goes"],
                              description="Solo una fuente. Sin este parámetro devuelve las dos."),
             OpenApiParameter("area", int, description="Solo los focos dentro de esta área protegida (id)."),
+            OpenApiParameter("agrupar", bool, description="Si es true, cada punto sale una sola vez con su "
+                             "detección más reciente; `detecciones` dice cuántas veces se detectó en el periodo. "
+                             "Recomendado para pintar el mapa."),
         ],
         responses={200: FocosRespuestaSerializer, 400: FocosErrorSerializer},
         examples=[
@@ -242,7 +245,11 @@ class FocosCalorView(APIView):
         except ValueError:
             return Response({"success": False, "mensaje": "El parámetro area debe ser un número entero."}, status=400)
 
-        focos = consultar_focos(horas, fuente, area)
+        agrupar = (request.query_params.get("agrupar") or "false").lower()
+        if agrupar not in ("true", "false"):
+            return Response({"success": False, "mensaje": "El parámetro agrupar debe ser true o false."}, status=400)
+
+        focos = consultar_focos(horas, fuente, area, agrupar == "true")
 
         return Response({
             "success": True,

@@ -144,6 +144,8 @@ class FocoSerializer(serializers.Serializer):
     area_protegida = serializers.CharField(allow_null=True, help_text="Nombre del área protegida, o null.")
     es_volcan = serializers.BooleanField(help_text="True si está a menos de 5 km de un volcán en erupción: "
                                                    "probablemente es calor volcánico y no un incendio.")
+    detecciones = serializers.IntegerField(help_text="Veces que se detectó este punto en el periodo. "
+                                                     "Con agrupar=false siempre es 1.")
 
 
 class FocosRespuestaSerializer(serializers.Serializer):

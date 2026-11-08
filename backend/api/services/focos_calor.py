@@ -109,10 +109,23 @@ def _a_dict(foco):
         "area_protegida_id": foco.area_protegida_id,
         "area_protegida": foco.area_protegida.nombre if foco.area_protegida_id else None,
         "es_volcan": foco.es_volcan,
+        "detecciones": 1,
     }
 
 
-def consultar(horas=HORAS_POR_DEFECTO, fuente=None, area=None):
+def _agrupar(focos):
+    """Una entrada por fuente y punto: su detección más reciente (focos ya viene ordenado) y cuántas hubo."""
+    puntos = {}
+    for foco in focos:
+        clave = (foco["fuente"], foco["latitude"], foco["longitude"])
+        if clave in puntos:
+            puntos[clave]["detecciones"] += 1
+        else:
+            puntos[clave] = foco
+    return list(puntos.values())
+
+
+def consultar(horas=HORAS_POR_DEFECTO, fuente=None, area=None, agrupar=False):
     """Focos guardados de las últimas `horas`, del más reciente al más antiguo."""
     horas = max(1, min(horas, HORAS_MAXIMAS))
     qs = (FocoCalor.objects.filter(fecha_deteccion__gte=timezone.now() - timedelta(hours=horas))
@@ -121,4 +134,5 @@ def consultar(horas=HORAS_POR_DEFECTO, fuente=None, area=None):
         qs = qs.filter(fuente__startswith=PREFIJOS_FUENTE[fuente])
     if area:
         qs = qs.filter(area_protegida_id=area)
-    return [_a_dict(foco) for foco in qs]
+    focos = [_a_dict(foco) for foco in qs]
+    return _agrupar(focos) if agrupar else focos
