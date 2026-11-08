@@ -16,7 +16,7 @@ from .serializers import (
     UsuarioSerializer, datos_usuario,
 )
 from .services.alertas import alertas_por_id, areas_con_ultima_alerta, areas_de_alertas
-from .services.nasa_firms import HORAS_MAXIMAS, HORAS_POR_DEFECTO, obtener_focos_calor
+from .services.focos_calor import HORAS_MAXIMAS, HORAS_POR_DEFECTO, consultar as consultar_focos
 
 logger = logging.getLogger(__name__)
 
@@ -198,23 +198,29 @@ class FocosCalorView(APIView):
         tags=["Focos de calor"],
         summary="Focos de calor de Ecuador continental",
         description=(
-            "Público. Detecciones de los satélites VIIRS (NOAA-20, NOAA-21 y S-NPP) de NASA FIRMS "
-            "dentro de Ecuador continental, de la más reciente a la más antigua.\n\n"
-            "Los datos se consultan a NASA como máximo cada 15 minutos (caché compartida)."
+            "Público. Detecciones de calor en todo Ecuador continental, de la más reciente a la más "
+            "antigua. No se limita a las áreas protegidas: `area_protegida` viene con el nombre si el "
+            "foco cae dentro de una, o null.\n\n"
+            "Los datos salen de la base del sistema, que se actualiza sola:\n"
+            "- **VIIRS** (NOAA-20, NOAA-21 y S-NPP, vía NASA FIRMS): píxel de 375 m, pocas pasadas al "
+            "día; se consulta cada 12 minutos.\n"
+            "- **GOES-19** (`GOES19_FDCF`): píxel de 2 km, imagen nueva cada 10 minutos. Solo se guardan "
+            "los códigos de fuego más confiables (10, 11, 30 y 31).\n\n"
+            "Un mismo fuego activo aparece una vez por cada imagen en la que se detecte. Los focos con "
+            "`es_volcan = true` están junto a un volcán en erupción y probablemente no son incendios."
         ),
         parameters=[
             OpenApiParameter("horas", int, description=f"Últimas N horas (1–{HORAS_MAXIMAS}, "
                              f"por defecto {HORAS_POR_DEFECTO}). Valores fuera del rango se ajustan."),
+            OpenApiParameter("fuente", str, enum=["viirs", "goes"],
+                             description="Solo una fuente. Sin este parámetro devuelve las dos."),
+            OpenApiParameter("area", int, description="Solo los focos dentro de esta área protegida (id)."),
         ],
-        responses={200: FocosRespuestaSerializer, 400: FocosErrorSerializer,
-                   502: FocosErrorSerializer},
+        responses={200: FocosRespuestaSerializer, 400: FocosErrorSerializer},
         examples=[
             OpenApiExample("Parámetro inválido", status_codes=["400"], response_only=True,
                            value={"success": False,
                                   "mensaje": "El parámetro horas debe ser un número entero."}),
-            OpenApiExample("NASA FIRMS no responde", status_codes=["502"], response_only=True,
-                           value={"success": False,
-                                  "mensaje": "No fue posible consultar los focos de calor."}),
         ],
         auth=[],
     )
@@ -227,14 +233,16 @@ class FocosCalorView(APIView):
                 "mensaje": "El parámetro horas debe ser un número entero.",
             }, status=400)
 
+        fuente = request.query_params.get("fuente") or None
+        if fuente not in (None, "viirs", "goes"):
+            return Response({"success": False, "mensaje": "El parámetro fuente debe ser viirs o goes."}, status=400)
+
         try:
-            focos = obtener_focos_calor(horas)
-        except Exception:
-            logger.exception("Error al consultar NASA FIRMS")
-            return Response({
-                "success": False,
-                "mensaje": "No fue posible consultar los focos de calor.",
-            }, status=502)
+            area = int(request.query_params.get("area") or 0) or None
+        except ValueError:
+            return Response({"success": False, "mensaje": "El parámetro area debe ser un número entero."}, status=400)
+
+        focos = consultar_focos(horas, fuente, area)
 
         return Response({
             "success": True,

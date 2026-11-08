@@ -172,7 +172,6 @@ Para probar aquí: usa *login*, copia el `access` y pégalo en el botón **Autho
 | 401 | Sin token, token vencido o credenciales inválidas |
 | 403 | Autenticado pero sin un grupo permitido |
 | 404 | No existe |
-| 502 | Servicio externo (NASA FIRMS) no respondió |
 
 Los errores de DRF tienen la forma `{"detail": "mensaje"}`.
 
@@ -198,7 +197,7 @@ Los mapas no salen de esta API: se piden directamente a GeoServer, sin token, en
         {'name': 'Autenticación', 'description': 'Login, renovación de token y datos del usuario.'},
         {'name': 'Áreas protegidas', 'description': 'Áreas protegidas con su alerta vigente (público).'},
         {'name': 'Alertas', 'description': 'Alertas de incendio (requiere grupo guardaparques o brigadas).'},
-        {'name': 'Focos de calor', 'description': 'Detecciones satelitales de NASA FIRMS (público).'},
+        {'name': 'Focos de calor', 'description': 'Detecciones satelitales de VIIRS (NASA FIRMS) y GOES-19 en todo Ecuador continental (público).'},
         {'name': 'GeoServer', 'description': 'Capas de peligro de incendio: WMS y WFS públicos, servidos por GeoServer.'},
     ],
 }

@@ -126,24 +126,29 @@ class ErrorSerializer(serializers.Serializer):
 class FocoSerializer(serializers.Serializer):
     latitude = serializers.FloatField()
     longitude = serializers.FloatField()
-    brightness = serializers.FloatField(allow_null=True, help_text="Temperatura de brillo canal I4 (K).")
-    brightness_ti5 = serializers.FloatField(allow_null=True, help_text="Temperatura de brillo canal I5 (K).")
+    brightness = serializers.FloatField(allow_null=True, help_text="Temperatura en K: de brillo I4 (VIIRS) o del fuego (GOES).")
+    brightness_ti5 = serializers.FloatField(allow_null=True, help_text="Temperatura de brillo canal I5 (K). Solo VIIRS.")
     frp = serializers.FloatField(allow_null=True, help_text="Potencia radiativa del fuego (MW).")
+    area_fuego_m2 = serializers.FloatField(allow_null=True, help_text="Área estimada del fuego (m²). Solo GOES.")
     acq_date = serializers.CharField(help_text="Fecha de detección en UTC (YYYY-MM-DD).")
     acq_time = serializers.CharField(help_text="Hora de detección en UTC (HHMM).")
     fecha_utc = serializers.DateTimeField()
     fecha_local = serializers.DateTimeField(help_text="Hora de Ecuador (America/Guayaquil).")
     satellite = serializers.CharField()
     instrument = serializers.CharField()
-    fuente = serializers.CharField(help_text="VIIRS_NOAA20_NRT, VIIRS_NOAA21_NRT o VIIRS_SNPP_NRT.")
-    confidence = serializers.CharField(help_text="Código de NASA: l, n o h.")
+    fuente = serializers.CharField(help_text="VIIRS_NOAA20_NRT, VIIRS_NOAA21_NRT, VIIRS_SNPP_NRT o GOES19_FDCF.")
+    confidence = serializers.CharField(help_text="Código original: l, n o h (VIIRS); 10, 11, 30 o 31 (GOES).")
     confianza = serializers.CharField(help_text="baja, nominal o alta.")
-    daynight = serializers.CharField(help_text="D = día, N = noche.")
+    daynight = serializers.CharField(allow_null=True, help_text="D = día, N = noche. Solo VIIRS.")
+    area_protegida_id = serializers.IntegerField(allow_null=True, help_text="Área protegida donde cae, o null.")
+    area_protegida = serializers.CharField(allow_null=True, help_text="Nombre del área protegida, o null.")
+    es_volcan = serializers.BooleanField(help_text="True si está a menos de 5 km de un volcán en erupción: "
+                                                   "probablemente es calor volcánico y no un incendio.")
 
 
 class FocosRespuestaSerializer(serializers.Serializer):
     success = serializers.BooleanField()
-    horas = serializers.IntegerField(help_text="Horas consultadas (ajustado a 1–48).")
+    horas = serializers.IntegerField(help_text="Horas consultadas (ajustado a 1–168).")
     total = serializers.IntegerField()
     focos = FocoSerializer(many=True)
 

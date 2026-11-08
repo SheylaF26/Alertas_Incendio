@@ -8,3 +8,6 @@ from .validacion import Validacion
 from .nivel_peligro import NivelPeligro
 from .producto_modelo import ProductoModelo
 from .peligro_zona import PeligroZona
+from .foco_calor import FocoCalor
+from .goes_archivo import GoesArchivo
+from .volcan import Volcan
