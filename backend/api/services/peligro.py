@@ -1,8 +1,9 @@
 """Procesa un GeoTIFF del modelo de peligro (0-100 %) y llena alerta_incendios.peligro_zona.
 
-Por cada área (recortando con su buffer de 10 km) y cada nivel de nivel_peligro:
-cuenta los píxeles, une los píxeles vecinos en un solo (multi)polígono y lo guarda.
-El nivel predominante de cada área lo calcula la vista v_peligro_resumen.
+Por cada área y cada nivel de nivel_peligro guarda dos versiones (columna incluye_buffer):
+- false: píxeles y porcentaje solo dentro del límite oficial; polígono hasta el límite.
+- true: píxeles y porcentaje dentro del buffer de 10 km; polígono hasta el buffer.
+El nivel predominante de cada área lo calcula la vista v_peligro_resumen, solo con incluye_buffer = false.
 """
 import logging
 import re
@@ -106,7 +107,7 @@ def como_multipoligono(geom):
     return MultiPolygon(planas) if planas else None
 
 
-def procesar(ruta, capa_geoserver=None, es_prueba=False, vigencia_desde=None, vigencia_hasta=None):
+def procesar(ruta, capa_geoserver=None, vigencia_desde=None, vigencia_hasta=None):
     ruta = Path(ruta)
     r = leer_tif(ruta)
     emision, desde, hasta = fechas(ruta, r, vigencia_desde, vigencia_hasta)
@@ -134,51 +135,58 @@ def procesar(ruta, capa_geoserver=None, es_prueba=False, vigencia_desde=None, vi
     if sin_nivel:
         logger.warning("%s: %d píxeles no caen en ningún rango de nivel_peligro.", ruta.name, sin_nivel)
 
-    # Nivel y porcentaje: solo con los píxeles DENTRO del límite del área (es lo que decide la alerta).
-    # Polígonos: hasta el buffer de 10 km, como contexto visual del entorno (no cambia el nivel).
+    # Cada área se guarda dos veces: solo adentro del límite (es lo que decide el nivel y la alerta)
+    # y con el buffer de 10 km. En cada versión, los números y el dibujo cubren lo mismo.
     filas = []
     for area_id, codigo, limite_wkt, buffer_wkt in areas:
         limite, buffer = from_wkt(limite_wkt), from_wkt(buffer_wkt)
         con_dato = nivel_px > 0
         en_limite = contains_xy(limite, X, Y) & con_dato
         en_buffer = contains_xy(buffer, X, Y) & con_dato
-        total = int(en_limite.sum())
-        if not total:
+        if not en_limite.any():
             logger.warning("%s: el área %s no tiene píxeles con dato dentro de su límite.", ruta.name, codigo)
             continue
+        versiones = ((False, en_limite, limite), (True, en_buffer, buffer))
         for n, _, _ in niveles:
-            px = int((en_limite & (nivel_px == n)).sum())
-            m = en_buffer & (nivel_px == n)
-            if not m.any():
+            del_nivel = nivel_px == n
+            if not (en_buffer & del_nivel).any():
                 continue
-            geom = como_multipoligono(poligono_de_mascara(m, r).intersection(buffer))
-            if geom is None or geom.is_empty:
-                continue
-            filas.append((area_id, n, px, round(Decimal(px * 100) / total, 2), geom.wkt))
+            # Se parte de los píxeles del buffer para que, al cortar por el límite, el dibujo llegue
+            # hasta el borde: con solo los píxeles de centro adentro quedaría dentado.
+            poligono = poligono_de_mascara(en_buffer & del_nivel, r)
+            for incluye_buffer, mascara, recorte in versiones:
+                px = int((mascara & del_nivel).sum())
+                if not px:
+                    continue
+                geom = como_multipoligono(poligono.intersection(recorte))
+                if geom is None or geom.is_empty:
+                    continue
+                pct = round(Decimal(px * 100) / int(mascara.sum()), 2)
+                filas.append((area_id, n, incluye_buffer, px, pct, geom.wkt))
 
     with transaction.atomic(using=DB), connections[DB].cursor() as cur:
         cur.execute(
             """INSERT INTO alerta_incendios.producto_modelo
                  (archivo, fecha_emision, vigencia_desde, vigencia_hasta, capa_geoserver,
-                  valor_min, valor_max, valor_medio, es_prueba, procesado_en)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, now())
+                  valor_min, valor_max, valor_medio, procesado_en)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, now())
                ON CONFLICT (archivo) DO UPDATE SET
                  fecha_emision = EXCLUDED.fecha_emision, vigencia_desde = EXCLUDED.vigencia_desde,
                  vigencia_hasta = EXCLUDED.vigencia_hasta,
                  capa_geoserver = COALESCE(EXCLUDED.capa_geoserver, alerta_incendios.producto_modelo.capa_geoserver),
                  valor_min = EXCLUDED.valor_min, valor_max = EXCLUDED.valor_max,
-                 valor_medio = EXCLUDED.valor_medio, es_prueba = EXCLUDED.es_prueba, procesado_en = now()
+                 valor_medio = EXCLUDED.valor_medio, procesado_en = now()
                RETURNING id""",
             [ruta.name, emision, desde, hasta, capa_geoserver,
              round(float(np.nanmin(valores)), 2), round(float(np.nanmax(valores)), 2),
-             round(float(np.nanmean(valores)), 2), es_prueba])
+             round(float(np.nanmean(valores)), 2)])
         producto_id = cur.fetchone()[0]
         cur.execute("DELETE FROM alerta_incendios.peligro_zona WHERE producto_id = %s", [producto_id])
-        for area_id, n, px, pct, wkt in filas:
+        for area_id, n, incluye_buffer, px, pct, wkt in filas:
             cur.execute(
                 """INSERT INTO alerta_incendios.peligro_zona
-                     (producto_id, area_protegida_id, nivel, pixeles, porcentaje_area, geom)
-                   VALUES (%s, %s, %s, %s, %s,
+                     (producto_id, area_protegida_id, nivel, incluye_buffer, pixeles, porcentaje_area, geom)
+                   VALUES (%s, %s, %s, %s, %s, %s,
                            ST_Multi(ST_CollectionExtract(ST_MakeValid(ST_GeomFromText(%s, 4326)), 3)))""",
-                [producto_id, area_id, n, px, pct, wkt])
+                [producto_id, area_id, n, incluye_buffer, px, pct, wkt])
     return producto_id, len(filas)

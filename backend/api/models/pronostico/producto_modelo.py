@@ -12,9 +12,7 @@ class ProductoModelo(models.Model):
     valor_min = models.DecimalField(max_digits=5, decimal_places=2, blank=True, null=True)
     valor_max = models.DecimalField(max_digits=5, decimal_places=2, blank=True, null=True)
     valor_medio = models.DecimalField(max_digits=5, decimal_places=2, blank=True, null=True)
-    es_prueba = models.BooleanField(default=False)
     procesado_en = models.DateTimeField(blank=True, null=True)
-    cargado_en = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         managed = False

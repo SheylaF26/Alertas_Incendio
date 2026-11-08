@@ -175,7 +175,15 @@ Para probar aquí: usa *login*, copia el `access` y pégalo en el botón **Autho
 | 502 | Servicio externo (NASA FIRMS) no respondió |
 
 Los errores de DRF tienen la forma `{"detail": "mensaje"}`.
+
+## Capas de peligro de incendio (GeoServer)
+Los mapas no salen de esta API: se piden directamente a GeoServer, sin token, en
+`https://geoservicios.inamhi.gob.ec/geoserver/`. Ver la sección **GeoServer** al final.
 """,
+    'POSTPROCESSING_HOOKS': [
+        'drf_spectacular.hooks.postprocess_schema_enums',
+        'api.openapi_geoserver.agregar_geoserver',
+    ],
     'SERVE_INCLUDE_SCHEMA': False,
     'SERVE_PERMISSIONS': ['rest_framework.permissions.AllowAny'],
     'SERVE_AUTHENTICATION': [],
@@ -191,6 +199,7 @@ Los errores de DRF tienen la forma `{"detail": "mensaje"}`.
         {'name': 'Áreas protegidas', 'description': 'Áreas protegidas con su alerta vigente (público).'},
         {'name': 'Alertas', 'description': 'Alertas de incendio (requiere grupo guardaparques o brigadas).'},
         {'name': 'Focos de calor', 'description': 'Detecciones satelitales de NASA FIRMS (público).'},
+        {'name': 'GeoServer', 'description': 'Capas de peligro de incendio: WMS y WFS públicos, servidos por GeoServer.'},
     ],
 }
 
