@@ -9,7 +9,7 @@ from django.utils import timezone
 
 from api.models import FocoCalor, GoesArchivo
 
-from . import goes, nasa_firms
+from . import generar_alertas, goes, nasa_firms
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +53,7 @@ def actualizar_firms():
     focos = nasa_firms.descargar_focos()
     with transaction.atomic(using=DB):
         nuevos = guardar(focos)
-    return {"recibidos": len(focos), "nuevos": nuevos}
+    return {"recibidos": len(focos), "nuevos": nuevos, "alertas": generar_alertas.desde_focos("firms")}
 
 
 def actualizar_goes():
@@ -80,6 +80,7 @@ def actualizar_goes():
         resumen["recibidos"] += len(focos)
 
     GoesArchivo.objects.filter(inicio_escaneo__lt=timezone.now() - timedelta(days=DIAS_CONTROL_GOES)).delete()
+    resumen["alertas"] = generar_alertas.desde_focos("goes")
     return resumen
 
 

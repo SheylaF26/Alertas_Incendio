@@ -20,6 +20,8 @@ from shapely import box, contains_xy, from_wkt, make_valid, unary_union
 from shapely.affinity import affine_transform
 from shapely.geometry import MultiPolygon, Polygon
 
+from . import generar_alertas
+
 logger = logging.getLogger(__name__)
 DB = "pronostico"
 FECHA_EN_NOMBRE = re.compile(r"(\d{8}T\d{4})Z?")
@@ -189,4 +191,5 @@ def procesar(ruta, capa_geoserver=None, vigencia_desde=None, vigencia_hasta=None
                    VALUES (%s, %s, %s, %s, %s, %s,
                            ST_Multi(ST_CollectionExtract(ST_MakeValid(ST_GeomFromText(%s, 4326)), 3)))""",
                 [producto_id, area_id, n, incluye_buffer, px, pct, wkt])
+    generar_alertas.desde_modelo(producto_id)
     return producto_id, len(filas)

@@ -13,6 +13,8 @@ from rest_framework.exceptions import APIException, NotFound, PermissionDenied, 
 from api.models import Estados, Registro, UsuariosAreas, Validacion
 from api.permissions import GUARDAPARQUES
 
+from . import generar_alertas
+
 DB = "pronostico"
 VALIDADO = "Validado"
 RECHAZADO = "Rechazado"
@@ -78,6 +80,7 @@ def crear(usuario, datos):
                 usuario_id=usuario.id, registro=registro, estado=Estados.objects.get(nombre=VALIDADO),
                 fecha_validacion=ahora, observacion="Validado automáticamente: lo reportó un guardaparques.",
             )
+            generar_alertas.desde_registro(registro)
     return _a_dict(registro, "validado" if es_guardaparques else "pendiente", _nombres([usuario.id]))
 
 
@@ -104,6 +107,8 @@ def decidir(usuario, registro_id, estado, observacion=None):
                 usuario_id=usuario.id, registro=registro, estado=Estados.objects.get(nombre=nombre_estado),
                 fecha_validacion=timezone.now(), observacion=observacion,
             )
+            if estado == "validado":
+                generar_alertas.desde_registro(registro)
     except IntegrityError:   # otro guardaparques decidió al mismo tiempo
         raise YaDecidido()
     return _a_dict(registro, estado, _nombres([registro.usuario_id]))

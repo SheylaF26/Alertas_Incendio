@@ -44,7 +44,7 @@ class LoginSerializer(TokenObtainPairSerializer):
 class AlertaResumenSerializer(serializers.ModelSerializer):
     class Meta:
         model = Alertas
-        fields = ["id", "nivel_de_riesgo", "color", "descripcion", "fecha"]
+        fields = ["id", "origen", "nivel_de_riesgo", "color", "descripcion", "fecha"]
 
 
 class AreaResumenSerializer(serializers.Serializer):
@@ -72,7 +72,8 @@ class AlertaSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Alertas
-        fields = ["id", "nivel_de_riesgo", "color", "descripcion", "fecha", "areas"]
+        fields = ["id", "origen", "nivel_de_riesgo", "color", "descripcion", "fecha", "areas",
+                  "producto", "foco_calor", "registro"]
 
     @extend_schema_field(AreaResumenSerializer(many=True))
     def get_areas(self, obj):
@@ -173,6 +174,10 @@ class RegistroEntradaSerializer(serializers.Serializer):
     evidencia = serializers.URLField(required=False, allow_null=True, max_length=500, help_text="URL de la foto.")
     area_protegida_id = serializers.IntegerField(
         required=False, help_text="Solo es obligatorio si el usuario tiene varias áreas asignadas.")
+
+
+class FotoRespuestaSerializer(serializers.Serializer):
+    url = serializers.URLField(help_text="URL de la foto: se envía en `evidencia` al crear el reporte.")
 
 
 class ValidarEntradaSerializer(serializers.Serializer):

@@ -1,7 +1,12 @@
 import logging
+from datetime import timezone as dt_timezone
 
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema
+from rest_framework.exceptions import ValidationError
+from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -10,13 +15,13 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from .models import Alertas, TipoEvento
 from .permissions import CON_LOGIN, GUARDAPARQUES, grupo_requerido
 from .serializers import (
-    AlertaSerializer, AreaSerializer, ErrorSerializer, FocosErrorSerializer,
+    AlertaSerializer, AreaSerializer, ErrorSerializer, FocosErrorSerializer, FotoRespuestaSerializer,
     EstacionesRespuestaSerializer, FocosRespuestaSerializer, LoginEntradaSerializer,
     LoginRespuestaSerializer, LoginSerializer, RefreshEntradaSerializer, RefreshRespuestaSerializer,
     RegistroEntradaSerializer, RegistroSalidaSerializer, SerieRespuestaSerializer, TipoEventoSerializer,
     UsuarioSerializer, ValidarEntradaSerializer, datos_usuario,
 )
-from .services import registros, tiempo_real
+from .services import fotos, registros, tiempo_real
 from .services.alertas import alertas_por_id, areas_con_ultima_alerta, areas_de_alertas
 from .services.focos_calor import HORAS_MAXIMAS, HORAS_POR_DEFECTO, consultar as consultar_focos
 
@@ -26,10 +31,7 @@ ERROR_401 = OpenApiExample(
     "Sin token o token vencido", status_codes=["401"],
     value={"detail": "Las credenciales de autenticación no se proveyeron."},
 )
-ERROR_403 = OpenApiExample(
-    "Sin grupo permitido", status_codes=["403"],
-    value={"detail": "No tienes permiso para esta acción."},
-)
+ORIGENES_ALERTA = ["modelo", "goes", "firms", "registro"]
 
 
 # --------------------------------------------------------------------------
@@ -143,27 +145,53 @@ class AreaDetailView(APIView):
 # --------------------------------------------------------------------------
 
 class AlertaListView(APIView):
-    permission_classes = [grupo_requerido(*CON_LOGIN)]
+    authentication_classes = []
+    permission_classes = [AllowAny]
 
     @extend_schema(
         tags=["Alertas"],
         summary="Listar alertas",
-        description="Requiere token y pertenecer a guardaparques o brigadas. "
-                    "Ordenadas de la más reciente a la más antigua.",
+        description="Público. Ordenadas de la más reciente a la más antigua.\n\n"
+                    "`origen` dice qué la causó: `modelo`, `goes`, `firms` o `registro`. "
+                    "Para consultar periódicamente, envía en `desde` la fecha de la última alerta recibida.",
         parameters=[
             OpenApiParameter("area", int, description="Filtra por id de área protegida."),
+            OpenApiParameter("origen", str, enum=ORIGENES_ALERTA, description="Filtra por origen."),
+            OpenApiParameter("desde", str, description="Solo alertas posteriores a esta fecha ISO 8601, "
+                                                       "p. ej. `2026-11-09T14:00:00Z`."),
             OpenApiParameter("limite", int, description="Máximo de alertas (por defecto 100, tope 500)."),
         ],
-        responses={200: AlertaSerializer(many=True), 401: ErrorSerializer, 403: ErrorSerializer},
-        examples=[ERROR_401, ERROR_403],
+        responses={200: AlertaSerializer(many=True), 400: FocosErrorSerializer},
+        auth=[],
     )
     def get(self, request):
         qs = Alertas.objects.order_by("-fecha")
-        area = request.query_params.get("area")
+        try:
+            area = _entero(request, "area")
+        except ValueError:
+            return _error("El parámetro area debe ser un número entero.")
         if area:
             qs = qs.filter(areaalerta__area_protegida=area)
+
+        origen = request.query_params.get("origen")
+        if origen:
+            if origen not in ORIGENES_ALERTA:
+                return _error(f"El parámetro origen debe ser uno de: {', '.join(ORIGENES_ALERTA)}.")
+            qs = qs.filter(origen=origen)
+
+        texto_desde = request.query_params.get("desde")
+        if texto_desde:
+            try:
+                # En una URL sin codificar, el + de la zona horaria llega como espacio
+                desde = parse_datetime(texto_desde.replace(" ", "+"))
+            except ValueError:
+                desde = None
+            if desde is None:
+                return _error("El parámetro desde debe ser una fecha ISO 8601.")
+            qs = qs.filter(fecha__gt=desde if timezone.is_aware(desde) else timezone.make_aware(desde, dt_timezone.utc))
+
         try:
-            limite = min(int(request.query_params.get("limite", 100)), 500)
+            limite = max(1, min(_entero(request, "limite", 100), 500))
         except ValueError:
             limite = 100
         alertas = list(qs[:limite])
@@ -172,15 +200,15 @@ class AlertaListView(APIView):
 
 
 class AlertaDetailView(APIView):
-    permission_classes = [grupo_requerido(*CON_LOGIN)]
+    authentication_classes = []
+    permission_classes = [AllowAny]
 
     @extend_schema(
         tags=["Alertas"],
         summary="Detalle de una alerta",
-        description="Requiere token y pertenecer a guardaparques o brigadas.",
-        responses={200: AlertaSerializer, 401: ErrorSerializer, 403: ErrorSerializer,
-                   404: ErrorSerializer},
-        examples=[ERROR_401, ERROR_403],
+        description="Público.",
+        responses={200: AlertaSerializer, 404: ErrorSerializer},
+        auth=[],
     )
     def get(self, request, pk):
         alerta = get_object_or_404(Alertas, pk=pk)
@@ -380,6 +408,27 @@ class RegistrosView(APIView):
         entrada = RegistroEntradaSerializer(data=request.data)
         entrada.is_valid(raise_exception=True)
         return Response(registros.crear(request.user, entrada.validated_data), status=201)
+
+
+class FotoRegistroView(APIView):
+    permission_classes = [grupo_requerido(*CON_LOGIN)]
+    parser_classes = [MultiPartParser]
+
+    @extend_schema(
+        tags=["Reportes"],
+        summary="Subir la foto de un reporte",
+        description="Requiere login. Envía `foto` como multipart (JPG o PNG, máximo 10 MB). "
+                    "Devuelve la URL que luego se manda en `evidencia` al crear el reporte.",
+        request={"multipart/form-data": {"type": "object", "required": ["foto"],
+                                         "properties": {"foto": {"type": "string", "format": "binary"}}}},
+        responses={201: FotoRespuestaSerializer, 400: ErrorSerializer, 401: ErrorSerializer,
+                   403: ErrorSerializer, 502: ErrorSerializer},
+    )
+    def post(self, request):
+        archivo = request.FILES.get("foto")
+        if archivo is None:
+            raise ValidationError({"foto": "Envía el archivo en el campo foto."})
+        return Response({"url": fotos.subir(archivo)}, status=201)
 
 
 class RegistrosPendientesView(APIView):

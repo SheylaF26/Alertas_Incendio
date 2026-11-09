@@ -136,6 +136,10 @@ REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 
+# Servidor de contenidos donde se guardan las fotos de los reportes
+CONTENTX_URL_UPLOAD = os.getenv('CONTENTX_URL_UPLOAD', '')
+CONTENTX_TOKEN = os.getenv('CONTENTX_TOKEN', '')
+
 # Swagger / OpenAPI: /api_incendios/docs/ (Swagger), /redoc/ y /schema/
 SPECTACULAR_SETTINGS = {
     'TITLE': 'API Alertas de Incendios - INAMHI',
@@ -157,8 +161,10 @@ Para probar aquí: usa *login*, copia el `access` y pégalo en el botón **Autho
 ## Grupos y permisos
 | id | grupo | acceso |
 |---|---|---|
-| 1 | aplicacion incendios guardaparques | alertas |
-| 2 | aplicacion incendios brigadas | alertas |
+| 1 | aplicacion incendios guardaparques | reportar (se valida solo) y validar reportes de sus áreas |
+| 2 | aplicacion incendios brigadas | aledaños: reportar (espera validación) |
+
+Sin login se puede consultar todo lo público, incluidas las alertas, pero no reportar.
 
 - El token incluye los claims `first_name` y `grupos` (lista de ids) para pintar la interfaz rápido.
 - Al abrir la app conviene llamar a `GET me/`: devuelve los grupos actuales leídos de la base.
@@ -196,7 +202,7 @@ Los mapas no salen de esta API: se piden directamente a GeoServer, sin token, en
     'TAGS': [
         {'name': 'Autenticación', 'description': 'Login, renovación de token y datos del usuario.'},
         {'name': 'Áreas protegidas', 'description': 'Áreas protegidas con su alerta vigente (público).'},
-        {'name': 'Alertas', 'description': 'Alertas de incendio (requiere grupo guardaparques o brigadas).'},
+        {'name': 'Alertas', 'description': 'Alertas de incendio del modelo, GOES, FIRMS y reportes validados (público).'},
         {'name': 'Focos de calor', 'description': 'Detecciones satelitales de VIIRS (NASA FIRMS) y GOES-19 en todo Ecuador continental (público).'},
         {'name': 'Reportes', 'description': 'Reportes de incendio desde la app y su validación (requiere login).'},
         {'name': 'Tiempo real', 'description': 'Estaciones automáticas: último dato e historial (público, solo lectura).'},
