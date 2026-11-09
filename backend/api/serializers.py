@@ -146,6 +146,9 @@ class FocoSerializer(serializers.Serializer):
                                                    "probablemente es calor volcánico y no un incendio.")
     detecciones = serializers.IntegerField(help_text="Veces que se detectó este punto en el periodo. "
                                                      "Con agrupar=false siempre es 1.")
+    primera_deteccion_utc = serializers.DateTimeField(help_text="Primera vez que se detectó este punto dentro del "
+                                                                "periodo pedido. Con agrupar=false es igual a fecha_utc.")
+    primera_deteccion_local = serializers.DateTimeField(help_text="Lo mismo, en hora de Ecuador.")
 
 
 class FocosRespuestaSerializer(serializers.Serializer):

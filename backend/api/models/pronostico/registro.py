@@ -4,7 +4,7 @@ from django.db import models
 class Registro(models.Model):
     id = models.BigAutoField(primary_key=True)
     fecha_registro = models.DateTimeField()
-    nombre = models.CharField(max_length=200, blank=True, null=True)
+    usuario_id = models.BigIntegerField()
     latitud = models.DecimalField(max_digits=9, decimal_places=6, blank=True, null=True)
     longitud = models.DecimalField(max_digits=9, decimal_places=6, blank=True, null=True)
     descripcion = models.TextField(blank=True, null=True)

@@ -110,16 +110,23 @@ def _a_dict(foco):
         "area_protegida": foco.area_protegida.nombre if foco.area_protegida_id else None,
         "es_volcan": foco.es_volcan,
         "detecciones": 1,
+        "primera_deteccion_utc": fecha_utc.isoformat(),
+        "primera_deteccion_local": fecha_utc.astimezone(ZONA_ECUADOR).isoformat(),
     }
 
 
 def _agrupar(focos):
-    """Una entrada por fuente y punto: su detección más reciente (focos ya viene ordenado) y cuántas hubo."""
+    """Una entrada por fuente y punto: su detección más reciente, la primera y cuántas hubo.
+
+    `focos` viene de la más reciente a la más antigua, así que cada repetición es anterior a las ya vistas.
+    """
     puntos = {}
     for foco in focos:
         clave = (foco["fuente"], foco["latitude"], foco["longitude"])
         if clave in puntos:
             puntos[clave]["detecciones"] += 1
+            puntos[clave]["primera_deteccion_utc"] = foco["fecha_utc"]
+            puntos[clave]["primera_deteccion_local"] = foco["fecha_local"]
         else:
             puntos[clave] = foco
     return list(puntos.values())
