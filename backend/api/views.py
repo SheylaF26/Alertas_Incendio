@@ -417,7 +417,8 @@ class FotoRegistroView(APIView):
     @extend_schema(
         tags=["Reportes"],
         summary="Subir la foto de un reporte",
-        description="Requiere login. Envía `foto` como multipart (JPG o PNG, máximo 10 MB). "
+        description="Requiere login. Envía `foto` como multipart (JPG o PNG, máximo 10 MB). Si pesa más de "
+                    "3 MB, se comprime hasta quedar en ese peso. "
                     "Devuelve la URL que luego se manda en `evidencia` al crear el reporte.",
         request={"multipart/form-data": {"type": "object", "required": ["foto"],
                                          "properties": {"foto": {"type": "string", "format": "binary"}}}},
