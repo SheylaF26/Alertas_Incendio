@@ -21,3 +21,4 @@ tzdata==2026.4
 urllib3==2.8.0
 h5py>=3.13,<4
 Pillow>=11.0,<13
+django-cors-headers>=4.6,<5

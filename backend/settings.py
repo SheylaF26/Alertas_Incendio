@@ -41,11 +41,13 @@ INSTALLED_APPS = [
     'api',
     'rest_framework',
     'drf_spectacular',
+    'corsheaders',
 ]
 
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -135,6 +137,11 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
+
+# Sitios desde los que el navegador puede llamar a esta API (el visor web)
+CORS_ALLOWED_ORIGINS = [
+    o.strip() for o in os.getenv('CORS_ALLOWED_ORIGINS', 'https://inamhi.gob.ec,http://localhost:4200').split(',') if o.strip()
+]
 
 # Servidor de contenidos donde se guardan las fotos de los reportes
 CONTENTX_URL_UPLOAD = os.getenv('CONTENTX_URL_UPLOAD', '')
