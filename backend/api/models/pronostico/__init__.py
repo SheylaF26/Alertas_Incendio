@@ -2,6 +2,7 @@ from .area_protegida import AreaProtegida
 from .usuarios_areas import UsuariosAreas
 from .alertas import Alertas
 from .area_alerta import AreaAlerta
+from .tipo_evento import TipoEvento
 from .registro import Registro
 from .estados import Estados
 from .validacion import Validacion

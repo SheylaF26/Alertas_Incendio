@@ -1,3 +1,4 @@
+from .estacion import Estacion
 from .precipitacion import Precipitacion
 from .humedad_relativa_max import HumedadRelativaMax
 from .humedad_relativa_min import HumedadRelativaMin

@@ -2,8 +2,9 @@ from django.urls import path
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 
 from .views import (
-    AlertaDetailView, AlertaListView, AreaDetailView, AreaListView,
-    FocosCalorView, LoginView, MeView, RefreshView,
+    AlertaDetailView, AlertaListView, AreaDetailView, AreaListView, EstacionesTiempoRealView,
+    FocosCalorView, LoginView, MeView, RefreshView, RegistrosPendientesView, RegistrosView,
+    SerieTiempoRealView, TiposEventoView, ValidarRegistroView,
 )
 
 urlpatterns = [
@@ -17,6 +18,14 @@ urlpatterns = [
     path("alertas/<int:pk>/", AlertaDetailView.as_view(), name="alerta_detalle"),
 
     path("focos-calor/", FocosCalorView.as_view(), name="focos_calor"),
+
+    path("tiempo-real/estaciones/", EstacionesTiempoRealView.as_view(), name="tiempo_real_estaciones"),
+    path("tiempo-real/serie/", SerieTiempoRealView.as_view(), name="tiempo_real_serie"),
+
+    path("tipos-evento/", TiposEventoView.as_view(), name="tipos_evento"),
+    path("registros/", RegistrosView.as_view(), name="registros"),
+    path("registros/pendientes/", RegistrosPendientesView.as_view(), name="registros_pendientes"),
+    path("registros/<int:pk>/validar/", ValidarRegistroView.as_view(), name="registro_validar"),
 
     # Documentación
     path("schema/", SpectacularAPIView.as_view(), name="schema"),

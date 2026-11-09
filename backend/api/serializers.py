@@ -2,7 +2,7 @@ from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
-from api.models import Alertas, AreaProtegida
+from api.models import Alertas, AreaProtegida, TipoEvento
 
 
 def grupos_de(usuario):
@@ -156,6 +156,101 @@ class FocosRespuestaSerializer(serializers.Serializer):
     horas = serializers.IntegerField(help_text="Horas consultadas (ajustado a 1–168).")
     total = serializers.IntegerField()
     focos = FocoSerializer(many=True)
+
+
+class TipoEventoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TipoEvento
+        fields = ["id", "nombre", "descripcion"]
+
+
+class RegistroEntradaSerializer(serializers.Serializer):
+    latitud = serializers.FloatField(min_value=-90, max_value=90)
+    longitud = serializers.FloatField(min_value=-180, max_value=180)
+    tipo_evento_id = serializers.PrimaryKeyRelatedField(
+        queryset=TipoEvento.objects.all(), source="tipo_evento", help_text="Id de `tipos-evento/`.")
+    descripcion = serializers.CharField(required=False, allow_blank=True)
+    evidencia = serializers.URLField(required=False, allow_null=True, max_length=500, help_text="URL de la foto.")
+    area_protegida_id = serializers.IntegerField(
+        required=False, help_text="Solo es obligatorio si el usuario tiene varias áreas asignadas.")
+
+
+class ValidarEntradaSerializer(serializers.Serializer):
+    estado = serializers.ChoiceField(choices=["validado", "rechazado"])
+    observacion = serializers.CharField(required=False, allow_blank=True)
+
+
+class RegistroSalidaSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    usuario_id = serializers.IntegerField()
+    reportado_por = serializers.CharField(allow_null=True)
+    fecha_registro = serializers.DateTimeField()
+    latitud = serializers.FloatField()
+    longitud = serializers.FloatField()
+    descripcion = serializers.CharField(allow_null=True)
+    evidencia = serializers.CharField(allow_null=True)
+    tipo_evento = AreaResumenSerializer()
+    area_protegida = AreaResumenSerializer()
+    estado = serializers.ChoiceField(choices=["pendiente", "validado", "rechazado"])
+
+
+class ValorActualSerializer(serializers.Serializer):
+    valor = serializers.FloatField()
+    fecha_utc = serializers.DateTimeField()
+    fecha_local = serializers.DateTimeField(help_text="Hora de Ecuador (America/Guayaquil).")
+
+
+class VariablesActualesSerializer(serializers.Serializer):
+    precipitacion = ValorActualSerializer(required=False)
+    temperatura_max = ValorActualSerializer(required=False)
+    temperatura_min = ValorActualSerializer(required=False)
+    humedad_relativa_max = ValorActualSerializer(required=False)
+    humedad_relativa_min = ValorActualSerializer(required=False)
+    velocidad_viento_max = ValorActualSerializer(required=False)
+    velocidad_viento_min = ValorActualSerializer(required=False)
+    direccion_viento_max = ValorActualSerializer(required=False)
+    direccion_viento_min = ValorActualSerializer(required=False)
+
+
+class EstacionActualSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    codigo = serializers.CharField(allow_null=True, help_text="Código INAMHI, p. ej. M0146.")
+    nombre = serializers.CharField(allow_null=True)
+    provincia = serializers.CharField(allow_null=True)
+    canton = serializers.CharField(allow_null=True)
+    latitud = serializers.FloatField()
+    longitud = serializers.FloatField()
+    altitud = serializers.FloatField(allow_null=True)
+    variables = VariablesActualesSerializer(help_text="Último dato válido de cada variable; las que no tienen dato no aparecen.")
+
+
+class EstacionesRespuestaSerializer(serializers.Serializer):
+    success = serializers.BooleanField()
+    horas = serializers.IntegerField(help_text="Horas consultadas (ajustado a 1–72).")
+    total = serializers.IntegerField()
+    estaciones = EstacionActualSerializer(many=True)
+
+
+class DatoSerieSerializer(serializers.Serializer):
+    fecha_utc = serializers.DateTimeField()
+    fecha_local = serializers.DateTimeField()
+    valor = serializers.FloatField()
+    instrumento = serializers.IntegerField()
+
+
+class EstacionResumenSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    codigo = serializers.CharField(allow_null=True)
+    nombre = serializers.CharField(allow_null=True)
+
+
+class SerieRespuestaSerializer(serializers.Serializer):
+    success = serializers.BooleanField()
+    estacion = EstacionResumenSerializer()
+    variable = serializers.CharField()
+    horas = serializers.IntegerField(help_text="Horas consultadas (ajustado a 1–168).")
+    total = serializers.IntegerField()
+    datos = DatoSerieSerializer(many=True)
 
 
 class FocosErrorSerializer(serializers.Serializer):

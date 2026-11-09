@@ -198,6 +198,8 @@ Los mapas no salen de esta API: se piden directamente a GeoServer, sin token, en
         {'name': 'Áreas protegidas', 'description': 'Áreas protegidas con su alerta vigente (público).'},
         {'name': 'Alertas', 'description': 'Alertas de incendio (requiere grupo guardaparques o brigadas).'},
         {'name': 'Focos de calor', 'description': 'Detecciones satelitales de VIIRS (NASA FIRMS) y GOES-19 en todo Ecuador continental (público).'},
+        {'name': 'Reportes', 'description': 'Reportes de incendio desde la app y su validación (requiere login).'},
+        {'name': 'Tiempo real', 'description': 'Estaciones automáticas: último dato e historial (público, solo lectura).'},
         {'name': 'GeoServer', 'description': 'Capas de peligro de incendio: WMS y WFS públicos, servidos por GeoServer.'},
     ],
 }

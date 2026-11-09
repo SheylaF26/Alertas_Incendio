@@ -7,14 +7,16 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
-from .models import Alertas
-from .permissions import CON_LOGIN, grupo_requerido
+from .models import Alertas, TipoEvento
+from .permissions import CON_LOGIN, GUARDAPARQUES, grupo_requerido
 from .serializers import (
     AlertaSerializer, AreaSerializer, ErrorSerializer, FocosErrorSerializer,
-    FocosRespuestaSerializer, LoginEntradaSerializer, LoginRespuestaSerializer,
-    LoginSerializer, RefreshEntradaSerializer, RefreshRespuestaSerializer,
-    UsuarioSerializer, datos_usuario,
+    EstacionesRespuestaSerializer, FocosRespuestaSerializer, LoginEntradaSerializer,
+    LoginRespuestaSerializer, LoginSerializer, RefreshEntradaSerializer, RefreshRespuestaSerializer,
+    RegistroEntradaSerializer, RegistroSalidaSerializer, SerieRespuestaSerializer, TipoEventoSerializer,
+    UsuarioSerializer, ValidarEntradaSerializer, datos_usuario,
 )
+from .services import registros, tiempo_real
 from .services.alertas import alertas_por_id, areas_con_ultima_alerta, areas_de_alertas
 from .services.focos_calor import HORAS_MAXIMAS, HORAS_POR_DEFECTO, consultar as consultar_focos
 
@@ -257,3 +259,155 @@ class FocosCalorView(APIView):
             "total": len(focos),
             "focos": focos,
         })
+
+
+# --------------------------------------------------------------------------
+# Tiempo real (estaciones automáticas, público)
+# --------------------------------------------------------------------------
+
+def _entero(request, nombre, defecto=None):
+    """Entero de la query string. Lanza ValueError si no lo es."""
+    valor = request.query_params.get(nombre)
+    return defecto if valor in (None, "") else int(valor)
+
+
+def _error(mensaje, estado=400):
+    return Response({"success": False, "mensaje": mensaje}, status=estado)
+
+
+class EstacionesTiempoRealView(APIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        tags=["Tiempo real"],
+        summary="Último dato de cada estación",
+        description=(
+            "Público. Estaciones meteorológicas automáticas operativas de todo el país que tienen algún "
+            "dato válido en el periodo, con su ubicación y el último valor de cada variable. "
+            "Pensado para pintar el mapa. Se actualiza como máximo cada 2 minutos."
+        ),
+        parameters=[
+            OpenApiParameter("horas", int, description=f"Antigüedad máxima del dato (1–{tiempo_real.HORAS_MAXIMAS_ESTACIONES}, "
+                             f"por defecto {tiempo_real.HORAS_POR_DEFECTO})."),
+            OpenApiParameter("area", int, description="Solo las estaciones dentro de esta área protegida o a menos de 10 km."),
+        ],
+        responses={200: EstacionesRespuestaSerializer, 400: FocosErrorSerializer, 404: FocosErrorSerializer},
+        auth=[],
+    )
+    def get(self, request):
+        try:
+            horas = _entero(request, "horas", tiempo_real.HORAS_POR_DEFECTO)
+            area = _entero(request, "area")
+        except ValueError:
+            return _error("Los parámetros horas y area deben ser números enteros.")
+
+        horas, estaciones = tiempo_real.estaciones_con_datos(horas, area)
+        if estaciones is None:
+            return _error("El área protegida no existe.", 404)
+        return Response({"success": True, "horas": horas, "total": len(estaciones), "estaciones": estaciones})
+
+
+class SerieTiempoRealView(APIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        tags=["Tiempo real"],
+        summary="Historial de una variable en una estación",
+        description="Público. Datos válidos de una variable, del más antiguo al más reciente. Pensado para gráficos.",
+        parameters=[
+            OpenApiParameter("estacion", int, required=True, description="Id de la estación (`id` en `tiempo-real/estaciones/`)."),
+            OpenApiParameter("variable", str, required=True, enum=list(tiempo_real.VARIABLES)),
+            OpenApiParameter("horas", int, description=f"Últimas N horas (1–{tiempo_real.HORAS_MAXIMAS_SERIE}, "
+                             f"por defecto {tiempo_real.HORAS_POR_DEFECTO})."),
+        ],
+        responses={200: SerieRespuestaSerializer, 400: FocosErrorSerializer, 404: FocosErrorSerializer},
+        auth=[],
+    )
+    def get(self, request):
+        variable = request.query_params.get("variable")
+        if variable not in tiempo_real.VARIABLES:
+            return _error(f"El parámetro variable debe ser uno de: {', '.join(tiempo_real.VARIABLES)}.")
+        try:
+            estacion = _entero(request, "estacion")
+            horas = _entero(request, "horas", tiempo_real.HORAS_POR_DEFECTO)
+        except ValueError:
+            return _error("Los parámetros estacion y horas deben ser números enteros.")
+        if estacion is None:
+            return _error("El parámetro estacion es obligatorio.")
+
+        resultado = tiempo_real.serie(estacion, variable, horas)
+        if resultado is None:
+            return _error("La estación no existe.", 404)
+        return Response({"success": True, "total": len(resultado["datos"]), **resultado})
+
+
+# --------------------------------------------------------------------------
+# Reportes de incendio desde la app
+# --------------------------------------------------------------------------
+
+class TiposEventoView(APIView):
+    permission_classes = [grupo_requerido(*CON_LOGIN)]
+
+    @extend_schema(
+        tags=["Reportes"],
+        summary="Tipos de evento que se pueden reportar",
+        responses={200: TipoEventoSerializer(many=True), 401: ErrorSerializer, 403: ErrorSerializer},
+    )
+    def get(self, request):
+        return Response(TipoEventoSerializer(TipoEvento.objects.order_by("id"), many=True).data)
+
+
+class RegistrosView(APIView):
+    permission_classes = [grupo_requerido(*CON_LOGIN)]
+
+    @extend_schema(
+        tags=["Reportes"],
+        summary="Enviar un reporte",
+        description=(
+            "Requiere login. El usuario sale del token.\n\n"
+            "- **Guardaparques:** el reporte queda `validado` de inmediato.\n"
+            "- **Aledaño (grupo brigadas):** queda `pendiente` hasta que decida un guardaparques "
+            "asignado a esa área.\n\n"
+            "El área es la asignada al usuario; si tiene varias, hay que enviar `area_protegida_id`. "
+            "`evidencia` es la URL de la foto, que se sube a otro servidor."
+        ),
+        request=RegistroEntradaSerializer,
+        responses={201: RegistroSalidaSerializer, 400: ErrorSerializer, 401: ErrorSerializer, 403: ErrorSerializer},
+    )
+    def post(self, request):
+        entrada = RegistroEntradaSerializer(data=request.data)
+        entrada.is_valid(raise_exception=True)
+        return Response(registros.crear(request.user, entrada.validated_data), status=201)
+
+
+class RegistrosPendientesView(APIView):
+    permission_classes = [grupo_requerido(GUARDAPARQUES)]
+
+    @extend_schema(
+        tags=["Reportes"],
+        summary="Reportes pendientes de validar",
+        description="Solo guardaparques. Devuelve los reportes sin decidir de las áreas que tiene asignadas.",
+        responses={200: RegistroSalidaSerializer(many=True), 401: ErrorSerializer, 403: ErrorSerializer},
+    )
+    def get(self, request):
+        return Response(registros.pendientes(request.user))
+
+
+class ValidarRegistroView(APIView):
+    permission_classes = [grupo_requerido(GUARDAPARQUES)]
+
+    @extend_schema(
+        tags=["Reportes"],
+        summary="Validar o rechazar un reporte",
+        description="Solo guardaparques asignados al área del reporte. Cada reporte se decide una sola vez (409 si ya se decidió).",
+        request=ValidarEntradaSerializer,
+        responses={200: RegistroSalidaSerializer, 400: ErrorSerializer, 401: ErrorSerializer,
+                   403: ErrorSerializer, 404: ErrorSerializer, 409: ErrorSerializer},
+    )
+    def post(self, request, pk):
+        entrada = ValidarEntradaSerializer(data=request.data)
+        entrada.is_valid(raise_exception=True)
+        datos = entrada.validated_data
+        return Response(registros.decidir(request.user, pk, datos["estado"], datos.get("observacion")))
