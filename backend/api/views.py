@@ -22,6 +22,7 @@ from .serializers import (
     UsuarioSerializer, ValidarEntradaSerializer, datos_usuario,
 )
 from .services import fotos, registros, tiempo_real
+from .services.areas import areas_geojson
 from .services.alertas import alertas_por_id, areas_con_ultima_alerta, areas_de_alertas
 from .services.focos_calor import HORAS_MAXIMAS, HORAS_POR_DEFECTO, consultar as consultar_focos
 
@@ -121,6 +122,22 @@ class AreaListView(APIView):
         areas = list(areas_con_ultima_alerta())
         alertas = alertas_por_id(a.ultima_alerta_id for a in areas)
         return Response(AreaSerializer(areas, many=True, context={"alertas": alertas}).data)
+
+
+class AreasGeoJsonView(APIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        tags=["Áreas protegidas"],
+        summary="Contornos de las áreas protegidas (GeoJSON)",
+        description="Público. Límite oficial de cada área, simplificado a unos 50 m para el mapa, "
+                    "con su `bbox` (oeste, sur, este, norte) para hacer zoom.",
+        responses={200: {"type": "object", "description": "GeoJSON FeatureCollection"}},
+        auth=[],
+    )
+    def get(self, request):
+        return Response(areas_geojson())
 
 
 class AreaDetailView(APIView):
@@ -319,6 +336,7 @@ class EstacionesTiempoRealView(APIView):
             OpenApiParameter("horas", int, description=f"Antigüedad máxima del dato (1–{tiempo_real.HORAS_MAXIMAS_ESTACIONES}, "
                              f"por defecto {tiempo_real.HORAS_POR_DEFECTO})."),
             OpenApiParameter("area", int, description="Solo las estaciones dentro de esta área protegida o a menos de 10 km."),
+            OpenApiParameter("solo_areas", bool, description="Si es true, solo las estaciones dentro de alguna área protegida o a menos de 10 km."),
         ],
         responses={200: EstacionesRespuestaSerializer, 400: FocosErrorSerializer, 404: FocosErrorSerializer},
         auth=[],
@@ -330,7 +348,11 @@ class EstacionesTiempoRealView(APIView):
         except ValueError:
             return _error("Los parámetros horas y area deben ser números enteros.")
 
-        horas, estaciones = tiempo_real.estaciones_con_datos(horas, area)
+        solo_areas = (request.query_params.get("solo_areas") or "false").lower()
+        if solo_areas not in ("true", "false"):
+            return _error("El parámetro solo_areas debe ser true o false.")
+
+        horas, estaciones = tiempo_real.estaciones_con_datos(horas, area, solo_areas == "true")
         if estaciones is None:
             return _error("El área protegida no existe.", 404)
         return Response({"success": True, "horas": horas, "total": len(estaciones), "estaciones": estaciones})

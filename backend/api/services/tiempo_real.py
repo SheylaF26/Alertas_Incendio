@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 from django.core.cache import cache
 from django.db import connections
 from django.utils import timezone
-from shapely import from_wkt
+from shapely import from_wkt, unary_union
 from shapely.geometry import Point
 
 from api.models import (
@@ -96,16 +96,24 @@ def _limite_del_area(area):
     return from_wkt(fila[0]) if fila and fila[0] else None
 
 
-def estaciones_con_datos(horas=HORAS_POR_DEFECTO, area=None):
-    """Estaciones con dato válido en las últimas `horas`. Con `area`, solo las de esa área y sus 10 km.
+def _zona_de_todas_las_areas():
+    """Unión de todas las áreas protegidas con sus 10 km."""
+    with connections["pronostico"].cursor() as cur:
+        cur.execute("SELECT ST_AsText(geom_buffer) FROM alerta_incendios.area_protegida WHERE geom_buffer IS NOT NULL")
+        return unary_union([from_wkt(fila[0]) for fila in cur.fetchall()])
 
+
+def estaciones_con_datos(horas=HORAS_POR_DEFECTO, area=None, solo_areas=False):
+    """Estaciones con dato válido en las últimas `horas`.
+
+    Con `area`, solo las de esa área y sus 10 km; con `solo_areas`, las de cualquier área y sus 10 km.
     Devuelve None si el área pedida no existe.
     """
     horas = max(1, min(horas, HORAS_MAXIMAS_ESTACIONES))
     estaciones = cache.get_or_set(f"tiempo_real_estaciones_{horas}", lambda: _cargar_estaciones(horas), CACHE_SEGUNDOS)
-    if area is None:
+    if area is None and not solo_areas:
         return horas, estaciones
-    zona = _limite_del_area(area)
+    zona = _limite_del_area(area) if area is not None else _zona_de_todas_las_areas()
     if zona is None:
         return horas, None
     return horas, [e for e in estaciones if zona.covers(Point(e["longitud"], e["latitud"]))]

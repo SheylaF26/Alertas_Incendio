@@ -2,7 +2,7 @@ from django.urls import path
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 
 from .views import (
-    AlertaDetailView, AlertaListView, AreaDetailView, AreaListView, EstacionesTiempoRealView,
+    AlertaDetailView, AlertaListView, AreaDetailView, AreaListView, AreasGeoJsonView, EstacionesTiempoRealView,
     FocosCalorView, FotoRegistroView, LoginView, MeView, RefreshView, RegistrosPendientesView, RegistrosView,
     SerieTiempoRealView, TiposEventoView, ValidarRegistroView,
 )
@@ -13,6 +13,7 @@ urlpatterns = [
     path("me/", MeView.as_view(), name="me"),
 
     path("areas/", AreaListView.as_view(), name="areas"),
+    path("areas/geojson/", AreasGeoJsonView.as_view(), name="areas_geojson"),
     path("areas/<int:pk>/", AreaDetailView.as_view(), name="area_detalle"),
     path("alertas/", AlertaListView.as_view(), name="alertas"),
     path("alertas/<int:pk>/", AlertaDetailView.as_view(), name="alerta_detalle"),
