@@ -21,7 +21,7 @@ from .serializers import (
     RegistroEntradaSerializer, RegistroSalidaSerializer, SerieRespuestaSerializer, TipoEventoSerializer,
     UsuarioSerializer, ValidarEntradaSerializer, datos_usuario,
 )
-from .services import fotos, registros, tiempo_real
+from .services import estado, fotos, registros, tiempo_real
 from .services.areas import areas_geojson
 from .services.alertas import alertas_por_id, areas_con_ultima_alerta, areas_de_alertas
 from .services.focos_calor import HORAS_MAXIMAS, HORAS_POR_DEFECTO, consultar as consultar_focos
@@ -59,7 +59,7 @@ ORIGENES_ALERTA = ["modelo", "goes", "firms", "registro"]
             "usuario": {"id": 1000, "username": "japolo", "first_name": "Juan",
                         "nombre": "Juan Apolo", "email": "correo@ejemplo.com",
                         "grupos": [{"id": 1, "nombre": "aplicacion incendios guardaparques"}],
-                        "areas": [{"id": 3, "codigo": "PNC", "nombre": "Parque Nacional Cotopaxi"}]},
+                        "areas": [{"id": 1, "codigo": "cayambe_coca", "nombre": "Parque Nacional Cayambe-Coca"}]},
         }),
         OpenApiExample("Credenciales inválidas", response_only=True, status_codes=["401"],
                        value={"detail": "Credenciales inválidas o sin acceso a la aplicación."}),
@@ -315,6 +315,41 @@ def _entero(request, nombre, defecto=None):
     """Entero de la query string. Lanza ValueError si no lo es."""
     valor = request.query_params.get(nombre)
     return defecto if valor in (None, "") else int(valor)
+
+
+class EstadoView(APIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        tags=["Estado"],
+        summary="Estado de las fuentes de datos",
+        description=(
+            "Público. Dice si cada fuente sigue llegando: GOES-19 (cada 10 minutos), VIIRS de NASA FIRMS "
+            "y el pronóstico del modelo de peligro. `ok` general es false si alguna está detenida.\n\n"
+            "Sirve para vigilar el sistema y para que el visor o la app avisen cuando un dato está atrasado. "
+            "Siempre responde 200; el estado va en el cuerpo."
+        ),
+        responses={200: dict},
+        examples=[OpenApiExample("Todo al día", response_only=True, value={
+            "ok": True, "consultado": "2026-11-15T06:20:00Z",
+            "fuentes": {
+                "goes": {"ok": True, "ultimo_dato": "2026-11-15T06:11:03Z", "horas_sin_datos": 0.1,
+                         "limite_horas": 1, "detalle": "Último archivo de GOES-19 procesado (llega cada 10 minutos)."},
+                "firms": {"ok": True, "ultimo_dato": "2026-11-15T02:40:10Z", "horas_sin_datos": 3.7,
+                          "limite_horas": 48,
+                          "detalle": "Último foco de VIIRS (NASA FIRMS) guardado. Solo se guarda cuando hay focos nuevos."},
+                "modelo": {"ok": True, "archivo": "IPI_20261115Z_20261115Z_cont.tif",
+                           "emitido": "2026-11-15T00:00:00Z", "valido_desde": "2026-11-15T00:00:00Z",
+                           "valido_hasta": "2026-11-16T00:00:00Z",
+                           "detalle": "Pronóstico del modelo de peligro válido para este momento; "
+                                      "si no hay, se muestra el más reciente y ok es false."},
+            },
+        })],
+        auth=[],
+    )
+    def get(self, request):
+        return Response(estado.consultar())
 
 
 def _error(mensaje, estado=400):

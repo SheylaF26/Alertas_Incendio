@@ -1,12 +1,13 @@
 """Crea las alertas a partir del modelo de peligro, los focos de calor y los reportes.
 
 Reglas:
-- Modelo: áreas cuyo nivel predominante sea Alto o Muy Alto. Una alerta por TIFF y área.
+- Modelo: áreas cuyo nivel predominante sea Alto o Muy Alto. Una alerta por área, día pronosticado
+  y nivel: si otra corrida repite el mismo nivel para ese día, no se vuelve a avisar.
 - Focos: dentro de un área, no volcánicos y con confianza nominal o alta. Máximo una alerta por
   área y fuente cada HORAS_SIN_REPETIR, porque un mismo fuego se detecta cada 10 minutos.
 - Reportes: cada reporte validado genera una alerta.
 """
-from datetime import timedelta
+from datetime import timedelta, timezone as zona
 from zoneinfo import ZoneInfo
 
 from django.db import connections, transaction
@@ -21,6 +22,7 @@ CONFIANZAS_FOCO = ("nominal", "alta")
 NIVEL_FOCO = "Alto"
 NIVEL_REGISTRO = "Muy Alto"
 ZONA_ECUADOR = ZoneInfo("America/Guayaquil")
+UTC = zona.utc
 FUENTES_FOCO = {
     "firms": ("VIIRS", "VIIRS (NASA FIRMS)"),
     "goes": ("GOES", "GOES-19"),
@@ -38,15 +40,19 @@ def _crear(origen, area_id, nivel, color, descripcion, **enlace):
 def desde_modelo(producto_id):
     """Alertas de un producto ya procesado. Devuelve cuántas se crearon."""
     with connections[DB].cursor() as cur:
-        cur.execute("""SELECT area_protegida_id, area, nivel_nombre, color, porcentaje_area
+        cur.execute("""SELECT area_protegida_id, area, nivel_nombre, color, porcentaje_area, vigencia_desde
                        FROM alerta_incendios.v_peligro_resumen
                        WHERE producto_id = %s AND nivel >= %s""", [producto_id, NIVEL_MINIMO_MODELO])
         filas = cur.fetchall()
     creadas = 0
-    for area_id, area, nivel, color, porcentaje in filas:
-        if AreaAlerta.objects.filter(area_protegida_id=area_id, alerta__producto_id=producto_id).exists():
+    for area_id, area, nivel, color, porcentaje, validez in filas:
+        # Un mismo día llega en varias corridas (hoy, mañana y pasado): una sola alerta por área, día y nivel.
+        if AreaAlerta.objects.filter(area_protegida_id=area_id, alerta__origen="modelo",
+                                     alerta__nivel_de_riesgo=nivel,
+                                     alerta__producto__vigencia_desde=validez).exists():
             continue
-        descripcion = f"El modelo de peligro indica nivel {nivel} en {area} ({porcentaje} % del área)."
+        dia = validez.astimezone(UTC).strftime("%d/%m/%Y")
+        descripcion = f"El modelo de peligro indica nivel {nivel} en {area} para el {dia} ({porcentaje} % del área)."
         _crear("modelo", area_id, nivel, color, descripcion, producto_id=producto_id)
         creadas += 1
     return creadas

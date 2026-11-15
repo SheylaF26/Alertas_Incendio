@@ -46,7 +46,8 @@ def _wms():
             "summary": "Mapa de una capa (WMS)",
             "description": (
                 "Público, sin token. Devuelve la imagen PNG de la capa para pintarla en el mapa.\n\n"
-                "Sin `time` responde con el producto más reciente." + TABLA_CAPAS + "\n"
+                "`time` es el día pronosticado. Cada corrida del modelo trae varios días y un mismo día llega en "
+                "varias corridas: se publica la más reciente de cada día. Sin `time` responde con el último día." + TABLA_CAPAS + "\n"
                 "Para consultar qué hay en un punto del mapa, usa `request=GetFeatureInfo` agregando "
                 "`query_layers`, `x`, `y` e `info_format=application/json`."
             ),
@@ -63,7 +64,7 @@ def _wms():
                 _param("srs", "Sistema de coordenadas.", "EPSG:4326"),
                 _param("format", "Formato de imagen.", "image/png"),
                 _param("transparent", "Fondo transparente.", "true", ["true", "false"]),
-                _param("time", "Fecha de emisión del producto en UTC, p. ej. `2026-11-07T17:00:00.000Z`."),
+                _param("time", "Día pronosticado (inicio de la validez, en UTC), p. ej. `2026-11-15T00:00:00.000Z`."),
             ],
             "responses": {
                 "200": {
@@ -99,7 +100,7 @@ def _wfs():
                 _param("count", "Máximo de registros.", 10, tipo="integer"),
                 _param("propertyName", "Atributos a devolver, separados por coma. Si no incluye `geom`, "
                                        "la respuesta no trae polígonos y pesa mucho menos."),
-                _param("cql_filter", "Filtro, p. ej. `codigo='sangay' AND fecha_emision='2026-11-07T17:00:00Z'`."),
+                _param("cql_filter", "Filtro, p. ej. `codigo='sangay' AND vigencia_desde='2026-11-15T00:00:00Z'` (día pronosticado; `fecha_emision` es la corrida del modelo)."),
             ],
             "responses": {
                 "200": {
@@ -118,7 +119,9 @@ def _wfs():
                                     "nivel": 4,
                                     "nivel_nombre": "Muy Alto",
                                     "porcentaje_area": 64.53,
-                                    "fecha_emision": "2026-11-06T17:00:00Z",
+                                    "fecha_emision": "2026-11-14T00:00:00Z",
+                                    "vigencia_desde": "2026-11-14T00:00:00Z",
+                                    "vigencia_hasta": "2026-11-15T00:00:00Z",
                                 },
                             }],
                         },

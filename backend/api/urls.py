@@ -3,6 +3,7 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, Spec
 
 from .views import (
     AlertaDetailView, AlertaListView, AreaDetailView, AreaListView, AreasGeoJsonView, EstacionesTiempoRealView,
+    EstadoView,
     FocosCalorView, FotoRegistroView, LoginView, MeView, RefreshView, RegistrosPendientesView, RegistrosView,
     SerieTiempoRealView, TiposEventoView, ValidarRegistroView,
 )
@@ -22,6 +23,8 @@ urlpatterns = [
 
     path("tiempo-real/estaciones/", EstacionesTiempoRealView.as_view(), name="tiempo_real_estaciones"),
     path("tiempo-real/serie/", SerieTiempoRealView.as_view(), name="tiempo_real_serie"),
+
+    path("estado/", EstadoView.as_view(), name="estado"),
 
     path("tipos-evento/", TiposEventoView.as_view(), name="tipos_evento"),
     path("registros/", RegistrosView.as_view(), name="registros"),

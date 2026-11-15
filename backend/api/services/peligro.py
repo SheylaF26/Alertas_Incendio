@@ -1,5 +1,12 @@
 """Procesa un GeoTIFF del modelo de peligro (0-100 %) y llena alerta_incendios.peligro_zona.
 
+Nombre de los archivos (acordado con modelación): IPI_<inicialización>Z_<validez>Z_<tipo>.tif
+- inicialización: AAAAMMDD, o AAAAMMDDHH si hay más de una corrida al día. En UTC.
+- validez: AAAAMMDD, el día pronosticado. En UTC. Cada corrida trae varios días.
+- tipo: cont (continuo, Float32, nodata -9999) o clas (niveles 1-4, UInt8, nodata 255).
+Se procesa el cont. Si a su lado está el clas del mismo nombre, se compara con nuestra
+reclasificación y se avisa si no coinciden.
+
 Por cada área y cada nivel de nivel_peligro guarda dos versiones (columna incluye_buffer):
 - false: píxeles y porcentaje solo dentro del límite oficial; polígono hasta el límite.
 - true: píxeles y porcentaje dentro del buffer de 10 km; polígono hasta el buffer.
@@ -9,7 +16,7 @@ import logging
 import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 
@@ -25,6 +32,24 @@ from . import generar_alertas
 logger = logging.getLogger(__name__)
 DB = "pronostico"
 FECHA_EN_NOMBRE = re.compile(r"(\d{8}T\d{4})Z?")
+NOMBRE_IPI = re.compile(r"^IPI_(\d{8})(\d{2})?Z_(\d{8})Z_(cont|clas)\.tiff?$", re.IGNORECASE)
+NODATA_CLAS = 255
+
+
+def partes_del_nombre(nombre: str):
+    """(inicialización, validez desde, validez hasta, tipo) de un nombre IPI, o None si no lo es."""
+    hallado = NOMBRE_IPI.match(nombre)
+    if not hallado:
+        return None
+    dia, hora, validez, tipo = hallado.groups()
+    try:
+        emision = datetime.strptime(dia + (hora or "00"), "%Y%m%d%H").replace(tzinfo=timezone.utc)
+        desde = datetime.strptime(validez, "%Y%m%d").replace(tzinfo=timezone.utc)
+    except ValueError:
+        raise ValueError(f"Fecha imposible en el nombre: {nombre}")
+    if desde.date() < emision.date():
+        raise ValueError(f"La validez es anterior a la inicialización: {nombre}")
+    return emision, desde, desde + timedelta(days=1), tipo.lower()
 
 
 @dataclass
@@ -64,7 +89,12 @@ def leer_tif(ruta: Path) -> Raster:
 
 
 def fechas(ruta: Path, raster: Raster, vigencia_desde=None, vigencia_hasta=None):
-    """Emisión y vigencia: primero los metadatos del TIFF; si no, el nombre del archivo."""
+    """Emisión y vigencia: del nombre IPI; si no lo es, de los metadatos del TIFF o del nombre antiguo."""
+    partes = partes_del_nombre(ruta.name)
+    if partes:
+        if partes[3] != "cont":
+            raise ValueError("Es el reclasificado (clas): se procesa el continuo (cont) del mismo nombre.")
+        return partes[:3]
     m = raster.metadatos
     if m.get("FECHA_EMISION"):
         emision = datetime.fromisoformat(m["FECHA_EMISION"])
@@ -78,6 +108,25 @@ def fechas(ruta: Path, raster: Raster, vigencia_desde=None, vigencia_hasta=None)
     if not desde or not hasta:
         raise ValueError("Falta la vigencia: no viene en el TIFF; pásala con --desde y --hasta.")
     return emision, desde, hasta
+
+
+def comparar_con_clas(ruta: Path, r: Raster, nivel_px: np.ndarray):
+    """Compara nuestros niveles con el clas de modelación. Devuelve (píxeles comparados, distintos) o None."""
+    ruta_clas = ruta.with_name(re.sub(r"_cont(\.tiff?)$", r"_clas\1", ruta.name, flags=re.IGNORECASE))
+    if ruta_clas == ruta or not ruta_clas.exists():
+        return None
+    clas = leer_tif(ruta_clas)
+    if clas.valores.shape != r.valores.shape or not np.allclose(
+            [clas.x0, clas.y0, clas.dx, clas.dy], [r.x0, r.y0, r.dx, r.dy], atol=1e-9):
+        raise ValueError(f"{ruta_clas.name} no tiene la misma malla que {ruta.name}.")
+    suyos = np.nan_to_num(clas.valores, nan=0).astype(np.int16)
+    suyos[suyos == NODATA_CLAS] = 0
+    comparables = (suyos > 0) | (nivel_px > 0)
+    distintos = int((suyos != nivel_px)[comparables].sum())
+    if distintos:
+        logger.warning("%s: %d de %d píxeles tienen otro nivel que en %s. Revisar los rangos de nivel_peligro.",
+                       ruta.name, distintos, int(comparables.sum()), ruta_clas.name)
+    return int(comparables.sum()), distintos
 
 
 def poligono_de_mascara(mascara: np.ndarray, r: Raster):
@@ -136,6 +185,7 @@ def procesar(ruta, capa_geoserver=None, vigencia_desde=None, vigencia_hasta=None
     sin_nivel = int((validos & (nivel_px == 0)).sum())
     if sin_nivel:
         logger.warning("%s: %d píxeles no caen en ningún rango de nivel_peligro.", ruta.name, sin_nivel)
+    comparacion = comparar_con_clas(ruta, r, nivel_px)
 
     # Cada área se guarda dos veces: solo adentro del límite (es lo que decide el nivel y la alerta)
     # y con el buffer de 10 km. En cada versión, los números y el dibujo cubren lo mismo.
@@ -192,4 +242,4 @@ def procesar(ruta, capa_geoserver=None, vigencia_desde=None, vigencia_hasta=None
                            ST_Multi(ST_CollectionExtract(ST_MakeValid(ST_GeomFromText(%s, 4326)), 3)))""",
                 [producto_id, area_id, n, incluye_buffer, px, pct, wkt])
     generar_alertas.desde_modelo(producto_id)
-    return producto_id, len(filas)
+    return producto_id, len(filas), comparacion

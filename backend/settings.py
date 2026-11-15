@@ -213,6 +213,7 @@ Los mapas no salen de esta API: se piden directamente a GeoServer, sin token, en
         {'name': 'Focos de calor', 'description': 'Detecciones satelitales de VIIRS (NASA FIRMS) y GOES-19 en todo Ecuador continental (público).'},
         {'name': 'Reportes', 'description': 'Reportes de incendio desde la app y su validación (requiere login).'},
         {'name': 'Tiempo real', 'description': 'Estaciones automáticas: último dato e historial (público, solo lectura).'},
+        {'name': 'Estado', 'description': 'Vigilancia: si GOES, FIRMS y el modelo siguen llegando (público).'},
         {'name': 'GeoServer', 'description': 'Capas de peligro de incendio: WMS y WFS públicos, servidos por GeoServer.'},
     ],
 }
