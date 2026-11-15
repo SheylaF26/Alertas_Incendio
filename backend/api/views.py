@@ -58,7 +58,8 @@ ORIGENES_ALERTA = ["modelo", "goes", "firms", "registro"]
             "access": "eyJhbGciOiJIUzI1NiIs...", "refresh": "eyJhbGciOiJIUzI1NiIs...",
             "usuario": {"id": 1000, "username": "japolo", "first_name": "Juan",
                         "nombre": "Juan Apolo", "email": "correo@ejemplo.com",
-                        "grupos": [{"id": 1, "nombre": "aplicacion incendios guardaparques"}]},
+                        "grupos": [{"id": 1, "nombre": "aplicacion incendios guardaparques"}],
+                        "areas": [{"id": 3, "codigo": "PNC", "nombre": "Parque Nacional Cotopaxi"}]},
         }),
         OpenApiExample("Credenciales inválidas", response_only=True, status_codes=["401"],
                        value={"detail": "Credenciales inválidas o sin acceso a la aplicación."}),
@@ -90,7 +91,7 @@ class MeView(APIView):
         tags=["Autenticación"],
         summary="Datos del usuario logueado",
         description=(
-            "Devuelve el usuario y sus grupos **leídos de la base en ese momento**.\n\n"
+            "Devuelve el usuario, sus grupos y sus áreas protegidas asignadas, **leídos de la base en ese momento**.\n\n"
             "Recomendado al abrir la app: si responde 200 la sesión sigue activa y los grupos "
             "están al día (si se le quitó un grupo, se refleja aquí aunque el token diga otra cosa); "
             "si responde 401, intenta `token/refresh/` y si falla, manda al login."

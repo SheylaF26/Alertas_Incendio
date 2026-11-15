@@ -2,7 +2,7 @@ from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
-from api.models import Alertas, AreaProtegida, TipoEvento
+from api.models import Alertas, AreaProtegida, TipoEvento, UsuariosAreas
 
 
 def grupos_de(usuario):
@@ -20,7 +20,17 @@ def datos_usuario(usuario):
         "nombre": usuario.get_full_name(),
         "email": usuario.email,
         "grupos": grupos_de(usuario),
+        "areas": areas_de(usuario),
     }
+
+
+def areas_de(usuario):
+    """Áreas protegidas asignadas al usuario en usuarios_areas (solo lectura)."""
+    return [
+        {"id": ua.area_protegida_id, "codigo": ua.area_protegida.codigo, "nombre": ua.area_protegida.nombre}
+        for ua in UsuariosAreas.objects.filter(usuario_id=usuario.id)
+                                       .select_related("area_protegida").order_by("area_protegida__nombre")
+    ]
 
 
 class LoginSerializer(TokenObtainPairSerializer):
@@ -89,6 +99,12 @@ class GrupoSerializer(serializers.Serializer):
     nombre = serializers.CharField()
 
 
+class AreaAsignadaSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    codigo = serializers.CharField(allow_null=True)
+    nombre = serializers.CharField()
+
+
 class UsuarioSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     username = serializers.CharField()
@@ -96,6 +112,11 @@ class UsuarioSerializer(serializers.Serializer):
     nombre = serializers.CharField(help_text="Nombre completo (first_name + last_name).")
     email = serializers.CharField()
     grupos = GrupoSerializer(many=True, help_text="Grupos de la app a los que pertenece.")
+    areas = AreaAsignadaSerializer(
+        many=True,
+        help_text="Áreas protegidas asignadas al usuario (tabla usuarios_areas). Un guardaparque "
+                  "valida los reportes de estas áreas; una brigada reporta en ellas. Vacío si no tiene.",
+    )
 
 
 class LoginEntradaSerializer(serializers.Serializer):
