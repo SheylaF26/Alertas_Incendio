@@ -183,7 +183,7 @@ class AlertaListView(APIView):
         auth=[],
     )
     def get(self, request):
-        qs = Alertas.objects.order_by("-fecha")
+        qs = Alertas.objects.select_related("foco_calor", "registro", "producto").order_by("-fecha")
         try:
             area = _entero(request, "area")
         except ValueError:

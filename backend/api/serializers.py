@@ -77,13 +77,33 @@ class AreaSerializer(serializers.ModelSerializer):
         return AlertaResumenSerializer(alerta).data if alerta else None
 
 
+class UbicacionSerializer(serializers.Serializer):
+    latitud = serializers.FloatField()
+    longitud = serializers.FloatField()
+
+
 class AlertaSerializer(serializers.ModelSerializer):
     areas = serializers.SerializerMethodField(help_text="Áreas protegidas afectadas por la alerta.")
+    ubicacion = serializers.SerializerMethodField(
+        help_text="Punto del foco de calor o del reporte que causó la alerta, para llevar el mapa ahí. "
+                  "Null en las alertas del modelo, que cubren toda el área.")
+    dia_pronosticado = serializers.SerializerMethodField(
+        help_text="Solo en las alertas del modelo: día para el que se pronostica el peligro "
+                  "(inicio de la validez, en UTC). Es el valor de `time` de las capas de GeoServer.")
 
     class Meta:
         model = Alertas
         fields = ["id", "origen", "nivel_de_riesgo", "color", "descripcion", "fecha", "areas",
-                  "producto", "foco_calor", "registro"]
+                  "ubicacion", "dia_pronosticado", "producto", "foco_calor", "registro"]
+
+    @extend_schema_field(UbicacionSerializer(allow_null=True))
+    def get_ubicacion(self, obj):
+        origen = obj.foco_calor or obj.registro
+        return {"latitud": float(origen.latitud), "longitud": float(origen.longitud)} if origen else None
+
+    @extend_schema_field(serializers.DateTimeField(allow_null=True))
+    def get_dia_pronosticado(self, obj):
+        return obj.producto.vigencia_desde if obj.producto else None
 
     @extend_schema_field(AreaResumenSerializer(many=True))
     def get_areas(self, obj):
