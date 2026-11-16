@@ -1,5 +1,6 @@
 import logging
-from datetime import timezone as dt_timezone
+from datetime import datetime, time, timezone as dt_timezone
+from zoneinfo import ZoneInfo
 
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -171,13 +172,17 @@ class AlertaListView(APIView):
         summary="Listar alertas",
         description="Público. Ordenadas de la más reciente a la más antigua.\n\n"
                     "`origen` dice qué la causó: `modelo`, `goes`, `firms` o `registro`. "
-                    "Para consultar periódicamente, envía en `desde` la fecha de la última alerta recibida.",
+                    "Para consultar periódicamente, envía en `desde` la fecha de la última alerta recibida.\n\n"
+                    "Por defecto, de las alertas del `modelo` solo vienen las del día de hoy (Ecuador) en adelante; "
+                    "con `vigentes=false` vienen también las de días ya pasados.",
         parameters=[
             OpenApiParameter("area", int, description="Filtra por id de área protegida."),
             OpenApiParameter("origen", str, enum=ORIGENES_ALERTA, description="Filtra por origen."),
             OpenApiParameter("desde", str, description="Solo alertas posteriores a esta fecha ISO 8601, "
                                                        "p. ej. `2026-11-09T14:00:00Z`."),
             OpenApiParameter("limite", int, description="Máximo de alertas (por defecto 100, tope 500)."),
+            OpenApiParameter("vigentes", bool, description="Por defecto `true`: omite las alertas del modelo "
+                                                          "de días pronosticados ya pasados."),
         ],
         responses={200: AlertaSerializer(many=True), 400: FocosErrorSerializer},
         auth=[],
@@ -207,6 +212,11 @@ class AlertaListView(APIView):
             if desde is None:
                 return _error("El parámetro desde debe ser una fecha ISO 8601.")
             qs = qs.filter(fecha__gt=desde if timezone.is_aware(desde) else timezone.make_aware(desde, dt_timezone.utc))
+
+        if request.query_params.get("vigentes", "true").lower() not in ("false", "0", "no"):
+            # El día pronosticado se guarda como las 00:00 UTC de ese día
+            hoy = timezone.now().astimezone(ZoneInfo("America/Guayaquil")).date()
+            qs = qs.exclude(origen="modelo", producto__vigencia_desde__lt=datetime.combine(hoy, time(0), dt_timezone.utc))
 
         try:
             limite = max(1, min(_entero(request, "limite", 100), 500))
