@@ -6,6 +6,7 @@
 """
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.exceptions import APIException, NotFound, PermissionDenied, ValidationError
@@ -90,6 +91,46 @@ def pendientes(usuario):
                      .select_related("tipo_evento", "area_protegida").order_by("-fecha_registro"))
     nombres = _nombres(r.usuario_id for r in registros)
     return [_a_dict(r, "pendiente", nombres) for r in registros]
+
+
+FILTRO_ESTADO = {
+    "pendiente": {"validacion__isnull": True},
+    "validado": {"validacion__estado__nombre": VALIDADO},
+    "rechazado": {"validacion__estado__nombre": RECHAZADO},
+}
+
+
+def listar(usuario, estado=None):
+    """Reportes con su decisión. El guardaparques ve los de sus áreas; el aledaño, solo los suyos."""
+    alcance = Q(usuario_id=usuario.id)
+    if usuario.groups.filter(name=GUARDAPARQUES).exists():
+        alcance |= Q(area_protegida__in=_areas_de(usuario))
+    consulta = Registro.objects.filter(alcance)
+    if estado:
+        consulta = consulta.filter(**FILTRO_ESTADO[estado])
+    registros = list(consulta.select_related("tipo_evento", "area_protegida").distinct().order_by("-fecha_registro"))
+
+    decisiones = {}
+    for v in (Validacion.objects.filter(registro_id__in=[r.id for r in registros])
+              .select_related("estado").order_by("fecha_validacion")):
+        decisiones.setdefault(v.registro_id, v)
+    nombres = _nombres([r.usuario_id for r in registros] + [v.usuario_id for v in decisiones.values()])
+
+    salida = []
+    for r in registros:
+        v = decisiones.get(r.id)
+        if v is None:
+            fila = _a_dict(r, "pendiente", nombres)
+            fila["validacion"] = None
+        else:
+            fila = _a_dict(r, "validado" if v.estado.nombre == VALIDADO else "rechazado", nombres)
+            fila["validacion"] = {
+                "decidido_por": nombres.get(v.usuario_id),
+                "fecha": v.fecha_validacion,
+                "observacion": v.observacion,
+            }
+        salida.append(fila)
+    return salida
 
 
 def decidir(usuario, registro_id, estado, observacion=None):

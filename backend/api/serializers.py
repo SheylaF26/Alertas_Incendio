@@ -240,6 +240,16 @@ class RegistroSalidaSerializer(serializers.Serializer):
     estado = serializers.ChoiceField(choices=["pendiente", "validado", "rechazado"])
 
 
+class DecisionSerializer(serializers.Serializer):
+    decidido_por = serializers.CharField(allow_null=True)
+    fecha = serializers.DateTimeField()
+    observacion = serializers.CharField(allow_null=True)
+
+
+class RegistroConDecisionSerializer(RegistroSalidaSerializer):
+    validacion = DecisionSerializer(allow_null=True, help_text="null mientras el reporte está pendiente.")
+
+
 class ValorActualSerializer(serializers.Serializer):
     valor = serializers.FloatField()
     fecha_utc = serializers.DateTimeField()

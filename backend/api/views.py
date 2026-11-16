@@ -18,7 +18,7 @@ from .serializers import (
     AlertaSerializer, AreaSerializer, ErrorSerializer, FocosErrorSerializer, FotoRespuestaSerializer,
     EstacionesRespuestaSerializer, FocosRespuestaSerializer, LoginEntradaSerializer,
     LoginRespuestaSerializer, LoginSerializer, RefreshEntradaSerializer, RefreshRespuestaSerializer,
-    RegistroEntradaSerializer, RegistroSalidaSerializer, SerieRespuestaSerializer, TipoEventoSerializer,
+    RegistroConDecisionSerializer, RegistroEntradaSerializer, RegistroSalidaSerializer, SerieRespuestaSerializer, TipoEventoSerializer,
     UsuarioSerializer, ValidarEntradaSerializer, datos_usuario,
 )
 from .services import estado, fotos, registros, tiempo_real
@@ -447,6 +447,26 @@ class TiposEventoView(APIView):
 
 class RegistrosView(APIView):
     permission_classes = [grupo_requerido(*CON_LOGIN)]
+
+    @extend_schema(
+        tags=["Reportes"],
+        summary="Reportes con su estado (validados, rechazados y pendientes)",
+        description=(
+            "Requiere login.\n\n"
+            "- **Guardaparques:** los reportes de sus áreas asignadas (y los suyos).\n"
+            "- **Aledaño (grupo brigadas):** solo los que él envió, para saber si se los aceptaron o rechazaron.\n\n"
+            "`validacion` trae quién decidió, cuándo y la observación; es `null` si sigue pendiente."
+        ),
+        parameters=[OpenApiParameter("estado", str, enum=list(registros.FILTRO_ESTADO),
+                                     description="Filtra por estado. Sin él devuelve todos.")],
+        responses={200: RegistroConDecisionSerializer(many=True), 400: ErrorSerializer,
+                   401: ErrorSerializer, 403: ErrorSerializer},
+    )
+    def get(self, request):
+        estado = request.query_params.get("estado") or None
+        if estado and estado not in registros.FILTRO_ESTADO:
+            return _error(f"El parámetro estado debe ser uno de: {', '.join(registros.FILTRO_ESTADO)}.")
+        return Response(registros.listar(request.user, estado))
 
     @extend_schema(
         tags=["Reportes"],
