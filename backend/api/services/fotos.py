@@ -1,7 +1,7 @@
 """Sube las fotos de evidencia al servidor de contenidos (contentx). En este backend no se guardan.
 
-Las que pesan más de TAMANO_FINAL se comprimen antes de enviarlas: primero se baja la calidad y,
-si no alcanza, también el tamaño de la imagen.
+Para que pesen poco, toda foto que pase de TAMANO_FINAL o de LADO_MAXIMO píxeles se convierte a JPEG:
+se achica hasta LADO_MAXIMO por el lado mayor y se baja la calidad hasta quedar en TAMANO_FINAL.
 """
 import io
 import logging
@@ -16,9 +16,10 @@ from rest_framework.exceptions import APIException, ValidationError
 logger = logging.getLogger(__name__)
 
 TAMANO_MAXIMO = 10 * 1024 * 1024   # lo más grande que se acepta recibir
-TAMANO_FINAL = 3 * 1024 * 1024     # lo más grande que se guarda
-CALIDADES = (85, 70, 55, 40)
-ESCALAS = (1, 0.75, 0.5, 0.35)
+TAMANO_FINAL = 500 * 1024          # lo más grande que se guarda
+LADO_MAXIMO = 1600                 # píxeles del lado mayor
+CALIDADES = (82, 72, 62, 50, 40)
+ESCALAS = (1, 0.75, 0.5)
 # Evita que una imagen pequeña en bytes pero enorme en píxeles agote la memoria.
 Image.MAX_IMAGE_PIXELS = 50_000_000
 ERRORES_IMAGEN = (UnidentifiedImageError, OSError, SyntaxError, ValueError, Image.DecompressionBombError)
@@ -40,9 +41,10 @@ def _tipo(datos):
 
 
 def _comprimir(datos):
-    """JPEG de máximo TAMANO_FINAL, con la mejor calidad y el mayor tamaño que quepan."""
+    """JPEG de máximo TAMANO_FINAL y LADO_MAXIMO, con la mejor calidad y el mayor tamaño que quepan."""
     with Image.open(io.BytesIO(datos)) as original:
         imagen = ImageOps.exif_transpose(original).convert("RGB")
+    imagen.thumbnail((LADO_MAXIMO, LADO_MAXIMO), Image.LANCZOS)
     ancho, alto = imagen.size
     for escala in ESCALAS:
         actual = imagen if escala == 1 else imagen.resize((round(ancho * escala), round(alto * escala)), Image.LANCZOS)
@@ -51,7 +53,7 @@ def _comprimir(datos):
             actual.save(salida, "JPEG", quality=calidad, optimize=True)
             if salida.tell() <= TAMANO_FINAL:
                 return salida.getvalue()
-    raise ValidationError({"foto": "No se pudo reducir la foto a 3 MB."})
+    raise ValidationError({"foto": "No se pudo reducir el peso de la foto."})
 
 
 def _preparar(archivo):
@@ -63,7 +65,9 @@ def _preparar(archivo):
     try:
         with Image.open(io.BytesIO(datos)) as imagen:
             imagen.verify()
-        if len(datos) <= TAMANO_FINAL:
+        with Image.open(io.BytesIO(datos)) as imagen:
+            grande = max(imagen.size) > LADO_MAXIMO
+        if len(datos) <= TAMANO_FINAL and not grande:
             return datos, extension, contenido
         return _comprimir(datos), ".jpg", "image/jpeg"
     except ERRORES_IMAGEN:
