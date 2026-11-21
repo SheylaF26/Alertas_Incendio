@@ -8,6 +8,12 @@ from .views import (
     SerieTiempoRealView, TiposEventoView, ValidarRegistroView,
 )
 
+from .fcm_views import (
+    RegistrarFCMView,
+    DesregistrarFCMView,
+)
+
+
 urlpatterns = [
     path("login/", LoginView.as_view(), name="login"),
     path("token/refresh/", RefreshView.as_view(), name="token_refresh"),
@@ -36,4 +42,18 @@ urlpatterns = [
     path("schema/", SpectacularAPIView.as_view(), name="schema"),
     path("docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger"),
     path("redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
+
+
+    #Notificaciones Firebase Cloud Messaging
+        path(
+            "fcm/registrar/",
+            RegistrarFCMView.as_view(),
+            name="fcm_registrar",
+        ),
+
+        path(
+            "fcm/desregistrar/",
+            DesregistrarFCMView.as_view(),
+            name="fcm_desregistrar",
+        ),
 ]

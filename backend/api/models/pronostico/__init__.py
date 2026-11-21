@@ -12,3 +12,4 @@ from .peligro_zona import PeligroZona
 from .foco_calor import FocoCalor
 from .goes_archivo import GoesArchivo
 from .volcan import Volcan
+from .dispositivos_fcm import DispositivoFCM
