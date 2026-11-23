@@ -9,11 +9,18 @@ Reglas:
 """
 from datetime import timedelta, timezone as zona
 from zoneinfo import ZoneInfo
+import logging
 
 from django.db import connections, transaction
 from django.utils import timezone
 
 from api.models import Alertas, AreaAlerta, FocoCalor, NivelPeligro
+
+# NUEVO: servicio Firebase
+from api.services.notificaciones_fcm import enviar_alerta_por_area
+from api.services.notificaciones_publicas import enviar_alerta_publica
+
+logger = logging.getLogger(__name__)
 
 DB = "pronostico"
 HORAS_SIN_REPETIR = 6
@@ -34,6 +41,39 @@ def _crear(origen, area_id, nivel, color, descripcion, **enlace):
         alerta = Alertas.objects.create(origen=origen, nivel_de_riesgo=nivel, color=color, descripcion=descripcion,
                                         fecha=timezone.now(), **enlace)
         AreaAlerta.objects.create(area_protegida_id=area_id, alerta=alerta)
+
+        # NUEVO: enviar Firebase solo después de confirmar
+        # la transacción de la base de datos.
+        alerta_id = alerta.pk
+
+        def notificar():
+            try:
+                enviar_alerta_por_area(
+                    alerta_id=alerta_id,
+                    area_id=area_id,
+                    nivel=nivel,
+                    descripcion=descripcion,
+                    origen=origen,
+                )
+                # Enviar también a los usuarios públicos.
+                enviar_alerta_publica(
+                    alerta_id=alerta_id,
+                    area_id=area_id,
+                    nivel=nivel,
+                    descripcion=descripcion,
+                )
+            except Exception:
+                logger.exception(
+                    "Error enviando FCM para la alerta %s",
+                    alerta_id,
+                )
+
+        transaction.on_commit(
+            notificar,
+            using=DB,
+            robust=True,
+        )
+
     return alerta
 
 

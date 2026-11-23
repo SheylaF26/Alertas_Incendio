@@ -4,6 +4,7 @@
 - Un aledaño (grupo brigadas) reporta: queda pendiente hasta que un guardaparques asignado a esa área decida.
 - Pendiente significa que el reporte todavía no tiene fila en validacion.
 """
+import logging
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
 from django.db.models import Q
@@ -15,6 +16,13 @@ from api.models import Estados, Registro, UsuariosAreas, Validacion
 from api.permissions import GUARDAPARQUES
 
 from . import generar_alertas
+
+from .notificaciones_reportes_fcm import notificar_reporte_pendiente
+
+logger = logging.getLogger(__name__)
+
+
+
 
 DB = "pronostico"
 VALIDADO = "Validado"
@@ -82,6 +90,35 @@ def crear(usuario, datos):
                 fecha_validacion=ahora, observacion="Validado automáticamente: lo reportó un guardaparques.",
             )
             generar_alertas.desde_registro(registro)
+   
+ # NUEVO: si es brigada, notificar al guardaparques
+        # de esa area cuando se confirme el guardado.
+        else:
+            registro_id = registro.id
+            nombre_area = registro.area_protegida.nombre
+            tipo_evento = registro.tipo_evento.nombre
+
+            def notificar_guardaparques():
+                try:
+                    notificar_reporte_pendiente(
+                        registro_id=registro_id,
+                        area_id=area_id,
+                        nombre_area=nombre_area,
+                        tipo_evento=tipo_evento,
+                    )
+                except Exception:
+                    logger.exception(
+                        "FCM: no se pudo notificar "
+                        "el reporte pendiente %s",
+                        registro_id,
+                    )
+
+            transaction.on_commit(
+                notificar_guardaparques,
+                using=DB,
+                robust=True,
+            )
+
     return _a_dict(registro, "validado" if es_guardaparques else "pendiente", _nombres([usuario.id]))
 
 
